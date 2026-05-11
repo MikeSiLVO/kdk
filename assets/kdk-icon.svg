@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- Rounded square background -->
+  <rect width="256" height="256" rx="56" fill="#1f7ad8"/>
+  <!-- Bold uppercase 'K'. Uppercase optically centers better than lowercase
+       (which has stem-weight on the left) and reads cleaner at 16x16. -->
+  <!-- y is the baseline. For a cap-height-only letter (~0.71em) at size 200,
+       baseline at y=200 puts the visual center near the canvas center (128). -->
+  <text x="128" y="200"
+        font-family="Segoe UI, Inter, Roboto, Helvetica, sans-serif"
+        font-size="200" font-weight="800" fill="white"
+        text-anchor="middle">K</text>
+</svg>

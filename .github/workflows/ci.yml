@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+    tags-ignore: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      full_matrix:
+        description: "Run full OS / Python matrix"
+        type: boolean
+        default: false
+
+jobs:
+  smoke:
+    name: smoke (${{ matrix.os }}, py${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(github.event.inputs.full_matrix == 'true' && '{"os":["ubuntu-latest","macos-latest","windows-latest"],"python-version":["3.10","3.11","3.12","3.13"]}' || '{"os":["ubuntu-latest"],"python-version":["3.12"]}') }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Qt platform plugin deps (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libxkbcommon0 libdbus-1-3 libxcb-cursor0
+
+      - name: Install kdk
+        run: pip install -e .
+
+      - name: Verify entry points
+        run: |
+          kdk --help
+          kdk validate --help
+
+      - name: Verify GUI imports (no display)
+        run: python -c "from kdk.gui.app import KdkApp, run_gui; print('gui imports ok')"
+
+      - name: Run validator on fixture (clean - expects exit 0)
+        run: kdk validate tests/fixtures/clean_skin

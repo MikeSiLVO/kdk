@@ -1,0 +1,222 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build (e.g. v0.1.0). Creates a draft release."
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  refresh-kodi-refs:
+    name: refresh Kodi reference snapshots
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.commit.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # Need full history + write token to push the snapshot commit back.
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install kdk (script imports `kdk.libs.addon` for the releases list)
+        run: pip install -e .
+
+      - name: Refresh snapshots
+        run: python scripts/update_kodi_refs.py
+
+      - name: Commit changes (if any)
+        id: commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet src/kdk/data/kodi/; then
+            echo "No upstream changes; using existing snapshots."
+            echo "sha=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git add src/kdk/data/kodi/
+          git commit -m "[skip ci] update Kodi reference snapshots"
+          # Only push the snapshot bump back to the default branch when the
+          # build actually traces to it - guards against `workflow_dispatch`
+          # from a feature branch silently overwriting `main`.
+          DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+          if git merge-base --is-ancestor "${GITHUB_SHA}" "origin/${DEFAULT_BRANCH}"; then
+            git push origin "HEAD:${DEFAULT_BRANCH}"
+          else
+            echo "Build ref ${GITHUB_SHA} is not on ${DEFAULT_BRANCH}; skipping snapshot push."
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: build (${{ matrix.os_label }}-${{ matrix.arch_label }})
+    needs: refresh-kodi-refs
+    runs-on: ${{ matrix.os }}
+    env:
+      VERSION: ${{ github.event.inputs.tag || github.ref_name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            os_label: linux
+            arch_label: x86_64
+            artifact_ext: ""
+          - os: windows-latest
+            os_label: windows
+            arch_label: x86_64
+            artifact_ext: ".exe"
+          # macos-latest on GitHub-hosted runners is Apple Silicon (arm64).
+          - os: macos-latest
+            os_label: macos
+            arch_label: arm64
+            artifact_ext: ""
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.refresh-kodi-refs.outputs.sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install Qt platform plugin deps (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libxkbcommon0 libdbus-1-3 libxcb-cursor0
+
+      - name: Install build deps
+        run: pip install -e ".[build]"
+
+      - name: Build PyInstaller binary
+        run: python make_binaries.py
+
+      - name: Smoke-test built binary (CLI)
+        shell: bash
+        run: |
+          ./dist/kdk${{ matrix.artifact_ext }} --help
+          ./dist/kdk${{ matrix.artifact_ext }} validate tests/fixtures/clean_skin
+
+      - name: Rename binaries
+        shell: bash
+        env:
+          BASE: kdk-${{ matrix.os_label }}-${{ matrix.arch_label }}
+        run: |
+          CLI_NAME="kdk-cli-${VERSION}-${{ matrix.os_label }}-${{ matrix.arch_label }}"
+          GUI_NAME="kdk-gui-${VERSION}-${{ matrix.os_label }}-${{ matrix.arch_label }}"
+          mv "dist/kdk${{ matrix.artifact_ext }}" "dist/${CLI_NAME}${{ matrix.artifact_ext }}"
+          mv "dist/kdk-gui${{ matrix.artifact_ext }}" "dist/${GUI_NAME}${{ matrix.artifact_ext }}"
+          echo "CLI_NAME=${CLI_NAME}" >> "$GITHUB_ENV"
+          echo "GUI_NAME=${GUI_NAME}" >> "$GITHUB_ENV"
+
+      - name: Archive binaries (non-Windows)
+        shell: bash
+        working-directory: dist
+        run: |
+          case "${{ runner.os }}" in
+            macOS)
+              # .zip preserves exec bit via macOS' extended attrs.
+              zip "${CLI_NAME}.zip" "${CLI_NAME}"
+              zip "${GUI_NAME}.zip" "${GUI_NAME}"
+              rm -f "${CLI_NAME}" "${GUI_NAME}"
+              ;;
+            Linux)
+              # tar.gz preserves the exec bit reliably across all extractors.
+              tar -czf "${CLI_NAME}.tar.gz" "${CLI_NAME}"
+              tar -czf "${GUI_NAME}.tar.gz" "${GUI_NAME}"
+              rm -f "${CLI_NAME}" "${GUI_NAME}"
+              ;;
+          esac
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: kdk-${{ matrix.os_label }}-${{ matrix.arch_label }}
+          # Bare path matches only on Windows (raw .exe); archive paths match
+          # only on Linux/macOS. `if-no-files-found: ignore` skips the rest.
+          path: |
+            dist/${{ env.CLI_NAME }}${{ matrix.artifact_ext }}
+            dist/${{ env.CLI_NAME }}.zip
+            dist/${{ env.CLI_NAME }}.tar.gz
+            dist/${{ env.GUI_NAME }}${{ matrix.artifact_ext }}
+            dist/${{ env.GUI_NAME }}.zip
+            dist/${{ env.GUI_NAME }}.tar.gz
+          if-no-files-found: ignore
+          retention-days: 7
+
+  build-wheel:
+    name: build wheel + sdist
+    needs: refresh-kodi-refs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.refresh-kodi-refs.outputs.sha }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install build
+      - run: python -m build
+      - uses: actions/upload-artifact@v5
+        with:
+          name: wheel-sdist
+          path: dist/*
+
+  release:
+    name: publish GitHub Release
+    needs: [refresh-kodi-refs, build, build-wheel]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.refresh-kodi-refs.outputs.sha }}
+
+      - uses: actions/download-artifact@v5
+        with:
+          path: artifacts
+
+      - name: Flatten artifacts
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name "kdk-*" -o -name "*.whl" -o -name "*.tar.gz" \) -exec cp {} release/ \;
+          ls -la release/
+
+      - name: Extract CHANGELOG section for this tag
+        run: |
+          VERSION="${{ github.event.inputs.tag || github.ref_name }}"
+          BARE="${VERSION#v}"
+          awk -v ver="$BARE" '
+            /^## \[/ {
+              if (in_section) exit;
+              if ($0 ~ "^## \\[" ver "\\]") { in_section=1; next }
+              next
+            }
+            in_section
+          ' CHANGELOG.md > release_body.md
+          # Fallback if no matching section (or CHANGELOG missing).
+          if [ ! -s release_body.md ]; then
+            echo "Release ${VERSION}" > release_body.md
+          fi
+          echo "--- release body ---"
+          cat release_body.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          draft: ${{ github.event_name == 'workflow_dispatch' }}
+          body_path: release_body.md
+          files: release/*

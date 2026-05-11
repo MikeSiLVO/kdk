@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<window id="Home">
+	<defaultcontrol always="true">9000</defaultcontrol>
+	<controls>
+		<control type="group" id="9000">
+			<control type="label">
+				<description>Hello</description>
+				<posx>50</posx>
+				<posy>50</posy>
+				<width>200</width>
+				<height>40</height>
+				<label>KDK fixture</label>
+			</control>
+		</control>
+	</controls>
+</window>

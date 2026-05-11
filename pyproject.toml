@@ -1,0 +1,75 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kdk"
+dynamic = ["version"]
+description = "Kodi skin validation tool - CLI and GUI"
+readme = "README.md"
+license = "GPL-2.0-only"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+authors = [
+    { name = "MikeSiLVO", email = "mikesilvo164@gmail.com" },
+]
+dependencies = [
+    "lxml>=4.9",
+    "PySide6>=6.6",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Environment :: X11 Applications",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Multimedia",
+]
+
+[project.urls]
+Homepage = "https://github.com/MikeSiLVO/kdk"
+Repository = "https://github.com/MikeSiLVO/kdk"
+Issues = "https://github.com/MikeSiLVO/kdk/issues"
+
+[project.optional-dependencies]
+build = [
+    "pyinstaller>=6.0",
+    # `scripts/make_icon.py` uses Pillow to pack the multi-rez .ico.
+    "Pillow>=10.0",
+]
+dev = [
+    "pytest>=8.0",
+    "pyright>=1.1.350",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+kdk = "kdk.__main__:main"
+
+[project.gui-scripts]
+kdk-gui = "kdk.gui.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+kdk = ["data/**/*"]
+
+[tool.setuptools.dynamic]
+version = { attr = "kdk.__version__" }
+
+[tool.pyright]
+pythonVersion = "3.10"
+venvPath = "."
+venv = ".venv"
+typeCheckingMode = "basic"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120

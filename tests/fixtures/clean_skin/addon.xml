@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="skin.kdk-fixture" version="0.0.1" name="KDK Fixture Skin" provider-name="kdk">
+	<requires>
+		<import addon="xbmc.gui" version="5.17.0"/>
+	</requires>
+	<extension point="xbmc.gui.skin" defaultthemename="Textures.xbt" debugging="false">
+		<res width="1280" height="720" aspect="16:9" default="true" folder="720p"/>
+	</extension>
+	<extension point="xbmc.addon.metadata">
+		<summary lang="en_GB">Minimal fixture skin for KDK CI smoke testing.</summary>
+		<description lang="en_GB">Tiny skin used by KDK's CI to verify the validator runs.</description>
+		<platform>all</platform>
+		<license>GPL-2.0-only</license>
+	</extension>
+</addon>
