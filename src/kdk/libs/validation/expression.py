@@ -140,26 +140,28 @@ SUPPORTS_EXPRESSIONS = {
         'description': 'Color for colorbox'
     },
 
+    # Boolean conditions, not labels: only $LOCALIZE/$NUMBER reach the parser, and
+    # a $VAR/$INFO/$ADDON bracket makes Kodi reject the condition (InfoExpression.cpp:227).
     'visible': {
-        'expressions': ['$VAR', '$INFO', '$PARAM', 'Boolean'],
+        'expressions': ['$LOCALIZE', '$NUMBER', '$EXP', '$PARAM', 'Boolean'],
         'source_line': 979,
         'parse_method': 'GetConditionalVisibility',
         'description': 'Visibility condition'
     },
     'enable': {
-        'expressions': ['$VAR', '$INFO', '$PARAM', 'Boolean'],
+        'expressions': ['$LOCALIZE', '$NUMBER', '$EXP', '$PARAM', 'Boolean'],
         'source_line': 980,
         'parse_method': 'XMLUtils::GetString',
         'description': 'Enable condition (treated as condition string)'
     },
     'usealttexture': {
-        'expressions': ['$VAR', '$INFO', '$PARAM', 'Boolean'],
+        'expressions': ['$LOCALIZE', '$NUMBER', '$EXP', '$PARAM', 'Boolean'],
         'source_line': 1025,
         'parse_method': 'XMLUtils::GetString',
         'description': 'Boolean condition for alternate texture'
     },
     'selected': {
-        'expressions': ['$VAR', '$INFO', '$PARAM', 'Boolean'],
+        'expressions': ['$LOCALIZE', '$NUMBER', '$EXP', '$PARAM', 'Boolean'],
         'source_line': 1026,
         'parse_method': 'XMLUtils::GetString',
         'description': 'Boolean condition for selected state'
@@ -862,12 +864,38 @@ def validate_tag_expression(tag_name, value):
         return (True, 'Literal value is valid')
 
 
+# Nodes whose text Kodi parses as a boolean condition, plus the `condition`
+# attribute (GUIIncludes.cpp:41-48); `expression` bodies parse the same way.
+CONDITION_TAGS = {"visible", "enable", "usealttexture", "selected", "expression"}
+CONDITION_ATTRIBUTE = "condition"
+
+
 class ValidationExpression:
     """Validates that expressions are only used in tags that support them."""
 
     def __init__(self, addon, validation_index=None):
         self.addon = addon
         self._validation_index = validation_index
+
+    def _check_condition(self, condition, expressions):
+        """Why Kodi cannot parse `condition`, or None. `$EXP` is flattened first.
+
+        `expressions` is None when the folder's expression map was never built,
+        in which case anything using $EXP is left alone rather than guessed at.
+        """
+        if expressions is None:
+            if "$EXP[" in condition.upper():
+                return None
+            flattened = condition
+        else:
+            flattened, unknown = utils.flatten_expressions(condition, expressions)
+            if unknown:
+                return f"undefined expression {sorted(unknown)[0]}"
+
+        problem = utils.check_condition(flattened)
+        if not problem or problem[0] != utils.STATE_INVALID:
+            return None
+        return problem[1]
 
     def check(self, progress_callback=None):
         """Find `$VAR`/`$INFO`/`$LOCALIZE` used in literal-only tags; returns issue dicts with `message`, `file`, `line`."""
@@ -891,7 +919,7 @@ class ValidationExpression:
                 if root is None:
                     continue
 
-                issues.extend(self._check_xml_tree(root, file_path))
+                issues.extend(self._check_xml_tree(root, file_path, folder))
 
         error_count = len(issues)
         if progress_callback:
@@ -899,20 +927,42 @@ class ValidationExpression:
 
         return issues
 
-    def _check_xml_tree(self, root, file_path):
+    def _check_xml_tree(self, root, file_path, folder=""):
         """Walk every element under `root` and collect expression-misuse issues for `file_path`."""
         issues = []
+        expression_map = getattr(self.addon, "expression_map", None) or {}
+        expressions = expression_map.get(folder) if folder in expression_map else None
 
         for element in root.iter():
             tag_name = element.tag
             tag_value = element.text or ''
+
+            conditions = []
+            if tag_name in CONDITION_TAGS and tag_value.strip():
+                conditions.append(tag_value.strip())
+            attr_condition = (element.get(CONDITION_ATTRIBUTE) or "").strip()
+            if attr_condition:
+                conditions.append(attr_condition)
+
+            for condition in conditions:
+                reason = self._check_condition(condition, expressions)
+                if reason:
+                    issues.append({
+                        'file': file_path,
+                        'line': getattr(element, 'sourceline', 0),
+                        'message': f'Kodi cannot parse this condition ({reason}), it always evaluates false: {condition[:60]}{"..." if len(condition) > 60 else ""}',
+                        'type': 'expression',
+                        'identifier': tag_name,
+                        'name': tag_name,
+                        'severity': SEVERITY_ERROR,
+                    })
 
             has_expression = ('$VAR[' in tag_value or
                             '$INFO[' in tag_value or
                             '$LOCALIZE[' in tag_value)
 
             if has_expression:
-                is_valid, message = validate_tag_expression(tag_name, tag_value)
+                is_valid, _ = validate_tag_expression(tag_name, tag_value)
 
                 if not is_valid:
                     issues.append({

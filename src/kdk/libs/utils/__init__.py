@@ -14,7 +14,15 @@ from .expressions import (
     is_dynamic_expression,
     starts_with_param_reference,
     contains_dynamic_expression,
+    flatten_expressions,
     get_param_names_in_context,
+)
+
+from .infobool import (
+    STATE_INVALID,
+    STATE_NEEDS_CONTEXT,
+    check_syntax,
+    check_condition,
 )
 
 from .files import (
@@ -81,7 +89,13 @@ __all__ = [
     "is_dynamic_expression",
     "starts_with_param_reference",
     "contains_dynamic_expression",
+    "flatten_expressions",
     "get_param_names_in_context",
+    # infobool
+    "STATE_INVALID",
+    "STATE_NEEDS_CONTEXT",
+    "check_syntax",
+    "check_condition",
     # files
     "eol_info_from_path_patterns",
     "save_xml",
