@@ -1,4 +1,4 @@
-"""Image metadata (type/dimensions/depth/file size) parsed from raw bytes; stdlib-only, no Pillow."""
+"""Image metadata helpers using only the Python standard library."""
 
 from __future__ import annotations
 
@@ -14,7 +14,11 @@ _InfoList = List[Tuple[str, str]]
 
 @functools.lru_cache(maxsize=128)
 def get_image_info(fname: str) -> _InfoList:
-    """Return `[(key, value)]` for `fname` (e.g. `[("Type", "png"), ("Dimensions", "800x600")]`); empty list if unknown/unreadable."""
+    """
+    Return basic info for an image file.
+    Output: list of (key, value), e.g. [("Type", "png"), ("Dimensions", "800x600")].
+    Empty list means unknown or unreadable.
+    """
     if not fname or not os.path.exists(fname):
         return []
 

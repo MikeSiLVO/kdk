@@ -1,17 +1,17 @@
-"""Wrap Kodi's `TexturePacker` to build a `.xbt` from a media directory."""
+"""Texture packing utilities: runs TexturePacker on skin media directories."""
 
 import os
 import subprocess
 import logging
 
-logger = logging.getLogger("kdk.skin.textures")
+logger = logging.getLogger("KodiDevKit.skin.textures")
 if not logger.handlers:
     logger.addHandler(logging.NullHandler())
 logger.propagate = True
 
 
 def texturepacker(media_path, settings, xbt_filename="Textures.xbt"):
-    """Run `TexturePacker` (path from `settings`) on `media_path`, writing `<media_path>/<xbt_filename>`."""
+    """Run TexturePacker on `media_path`, writing the output to `xbt_filename` there."""
     tp_path = settings.get("texturepacker_path")
     if not tp_path:
         return None

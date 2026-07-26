@@ -1,4 +1,4 @@
-"""Include-tag validation: definitions, references, parameters, and runtime-addon detection."""
+"""Include validation for Kodi skins."""
 
 import os
 import re
@@ -24,12 +24,11 @@ class ValidationInclude:
     def __init__(self, addon):
         self.addon = addon
         self.runtime_addons = self._detect_runtime_addons()
-        # Keyed by `(include_name, frozenset(params))` because the same include
-        # resolves differently per parameter set.
+        # Cache for parameter resolution: (include_name, frozenset(params)) -> resolved_name
         self._resolution_cache = {}
 
     def _detect_runtime_addons(self):
-        """Return imported runtime-content addon IDs found in `addon.xml`."""
+        """Set of addon IDs in addon.xml that generate runtime content (skinvariables / skinshortcuts)."""
         if not self.addon:
             return set()
 
@@ -55,7 +54,7 @@ class ValidationInclude:
             return set()
 
     def _is_runtime_include(self, include_name):
-        """`True` if `include_name` matches one of the runtime-generated naming patterns."""
+        """True if `include_name` matches a runtime-generated name pattern."""
         if not include_name:
             return False
 
@@ -67,7 +66,12 @@ class ValidationInclude:
         return False
 
     def _resolve_include_name_kodi_style(self, name, params=None):
-        """Resolve `$PARAM[...]` in `name` using `params`, replacing undefined params with `""` (matches `GUIIncludes.cpp:628`)."""
+        """Resolve $PARAM references in an include name using Kodi's rules.
+
+        Kodi replaces undefined params with empty strings (GUIIncludes.cpp:628).
+        Example: "Dialog_Background_Blur$PARAM[dialog_size]" with dialog_size
+        undefined becomes "Dialog_Background_Blur".
+        """
         if not name or "$PARAM[" not in name:
             return name
 
@@ -97,7 +101,10 @@ class ValidationInclude:
         return utils.get_all_parameter_contexts(self.addon, folder)
 
     def check(self, progress_callback=None):
-        """Find undefined/unused `<include>` definitions; counts `<fontset>` and `<include>` references as usage."""
+        """
+        Check undefined/unused includes. Also counts <fontset>/<include> as usage.
+        Returns list of {"message": str, "file": str, "line": int}.
+        """
         total_includes = sum(len(self.addon.include_map.get(f, {})) for f in self.addon.xml_folders)
         total_files = sum(len(self.addon.window_files.get(f, [])) for f in self.addon.xml_folders)
 

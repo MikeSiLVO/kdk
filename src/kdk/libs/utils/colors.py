@@ -13,7 +13,7 @@ def is_kodi_hex(text: str) -> bool:
 
 
 def to_hex(red: int, green: int, blue: int, alpha: Optional[int] = None) -> str:
-    """Encode RGB(A) as `#RRGGBBAA` (alpha defaults to fully opaque)."""
+    """Convert RGB(A) values to hex string for Sublime Text tooltips."""
     r = max(0, min(255, red))
     g = max(0, min(255, green))
     b = max(0, min(255, blue))

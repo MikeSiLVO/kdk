@@ -1,4 +1,4 @@
-"""Build the per-skin validation index: font/label/image/ID definitions and references across every XML file."""
+"""Builds the validation index: font/label/image/control-id usage across the skin."""
 
 from __future__ import annotations
 from typing import TYPE_CHECKING
@@ -46,17 +46,24 @@ def _load_infolabel_whitelist():
 
 
 def _build_control_regex():
-    """Build a `name(123)`-style regex for control-ID references; populates `_EXCLUDED_FUNCTIONS` so InfoLabel functions taking integer indices aren't false matches."""
+    """
+    Build control ID regex with InfoLabel function exclusions.
+
+    Generates a regex that matches control ID references in conditions,
+    but excludes InfoLabel functions that take integer parameters
+    (like Container.Position(5) where 5 is an index, not a control ID).
+
+    Returns:
+        Regex pattern string for control ID references
+    """
     global _CONTROL_REGEX_PATTERN, _EXCLUDED_FUNCTIONS
     if _CONTROL_REGEX_PATTERN is not None and _EXCLUDED_FUNCTIONS is not None:
         return _CONTROL_REGEX_PATTERN
 
     whitelist = _load_infolabel_whitelist()
 
-    # Build list of function names to exclude (these take integer parameters but are not control IDs)
-    # E.g., Container.Position(5), Window.IsVisible(10), ListItem(5)
-    # Window.* functions based on Kodi source: xbmc/GUIInfoManager.cpp lines 7971-7979
-    # All entries lowercase - matched case-insensitively at lookup time
+    # Window.* InfoLabels per Kodi GUIInfoManager.cpp:7971-7979. Stored
+    # lowercase; lookups do .lower() too.
     excluded_functions = {
         'window', 'window.is', 'window.isactive', 'window.isvisible', 'window.ismedia',
         'window.isdialogtopmost', 'window.ismodaldialogtopmost', 'window.previous', 'window.next',
@@ -84,16 +91,19 @@ def _build_control_regex():
 
 
 class SkinIndex:
-    """Scan every XML file in a skin and aggregate font/label/image/ID metadata for validation."""
+    """Walks every skin xml file once to build the validation index.
+
+    Indexes font defs/uses, label references, image paths, and control IDs.
+    """
 
     def __init__(self, skin):
         self.skin = skin
         self.skin_path = skin.path
         self.xml_folders = skin.xml_folders
-        self.include_maps = None  # Not used in new implementation
+        self.include_maps = None
 
     def build_validation_index(self, progress_callback=None):
-        """Build the validation index in a single XML pass; returns a `dict` with `fonts_*`/`labels_*`/`ids_*`/`window_*`/`images_referenced` etc."""
+        """Build and return the validation index in a single pass over the skin."""
         if progress_callback:
             progress_callback("Building validation index...")
 
@@ -300,7 +310,6 @@ class SkinIndex:
             if progress_callback:
                 progress_callback(f"Processed {include_count} include definitions")
 
-        # Build include_to_windows once after all folders are processed.
         index['include_to_windows'] = {}
         for folder in self.skin.xml_folders:
             index['include_to_windows'][folder] = {}
@@ -313,10 +322,8 @@ class SkinIndex:
                         if window_file not in index['include_to_windows'][folder][inc_name]:
                             index['include_to_windows'][folder][inc_name].append(window_file)
 
-        # Resolve each window and extract IDs from the resolved tree.
-        # This replaces the old manual _resolve_include_ids_recursive() approach
-        # with actual include expansion, giving accurate ID sets.
-        # Runs sequentially (resolver's _source_file is not thread-safe).
+        # Resolve each window so the ID set reflects expanded includes too.
+        # Single-threaded; the resolver's _source_file isn't thread-safe.
         if hasattr(self.skin, 'resolver') and self.skin.resolver:
             if progress_callback:
                 progress_callback("Resolving windows for ID extraction...")
@@ -382,10 +389,9 @@ class SkinIndex:
         return index
 
     def _get_optimal_workers(self):
-        """Worker count tuned for I/O-bound XML parsing (capped at 8 to avoid scheduling overhead)."""
+        """Pick a worker count for I/O-bound XML parsing (capped at 8)."""
         cpu_count = os.cpu_count() or 1
 
-        # Adaptive sizing based on CPU capabilities
         if cpu_count == 1:
             return 3  # Still helps with I/O overlap on single-core
         elif cpu_count == 2:
@@ -394,7 +400,10 @@ class SkinIndex:
             return min(cpu_count + 4, 8)  # Cap at 8 to avoid overhead
 
     def _process_window_file(self, path, folder):
-        """Extract per-file metadata (thread-safe; never mutates shared state); returns a per-file dict or `None` on failure."""
+        """Worker fn: extract fonts/labels/ids from one window file (thread-safe).
+
+        Must not mutate shared state. Returns a per-file results dict or None.
+        """
         try:
             if "script-skinshortcuts-includes.xml" in path.lower():
                 return None
@@ -438,14 +447,14 @@ class SkinIndex:
                 if inc_name:
                     results['window_includes'].append({'name': inc_name})
 
-            # This includes both <control> and <item> elements (list items in <content> blocks)
+            # `base_ids` includes both <control id=...> and <item id=...> entries;
+            # the latter are list items that scripts can address via Container().HasFocus().
             for elem in root.iter('control'):
                 ctrl_id = elem.get('id')
                 if ctrl_id:
                     ctrl_id = utils.normalize_control_id(ctrl_id)
                     results['base_ids'].add(ctrl_id)
 
-            # These are list item IDs that can be referenced with Container().HasFocus()
             for item_elem in root.iter('item'):
                 item_id = item_elem.get('id')
                 if item_id:
@@ -465,7 +474,17 @@ class SkinIndex:
             return None
 
     def build_include_usages(self, progress_callback=None):
-        """Index every `<include>` use site and its `<param>` values, so `$PARAM` references can be resolved when validating variables."""
+        """
+        Scan all window/include files to track where includes are USED with what parameters.
+
+        This enables context-aware variable validation where variables containing $PARAM
+        can be resolved with actual parameter values from usage sites.
+
+        Example:
+            Variable defined as: <variable name="Label_Title_C$PARAM[id]3">
+            Used in include with: <param name="id">50</param>
+            Resolution: Label_Title_C$PARAM[id]3 -> Label_Title_C503
+        """
         if self.skin._include_usages_built:
             return  # Already built
 
@@ -614,7 +633,6 @@ class SkinIndex:
                 val = node.attrib.get(attr)
                 if val:
                     _track(val.strip(), node, attr)
-            # Texture-only attrs (fallback on <label> is text, not an image)
             if is_texture_tag:
                 for attr in texture_only_attrs:
                     val = node.attrib.get(attr)
@@ -622,7 +640,7 @@ class SkinIndex:
                         _track(val.strip(), node, attr)
 
     def _check_image_files(self, index, progress_callback=None):
-        """Pre-resolve every referenced image against the filesystem so `ImageCheck` is I/O-free; populates `index['image_files_checked']`."""
+        """Stat every referenced image so ImageCheck can skip disk I/O later."""
         if 'images_referenced' not in index:
             return
 
@@ -697,7 +715,14 @@ class SkinIndex:
             return v
 
         def classify_path(val_norm: str):
-            """Return `(status, detail)`: `exact`/`None`, `case_mismatch`/correct-path, `wrong_path`/[candidates], or `missing`/`None`."""
+            """
+            Classify image path existence.
+            Returns: (status, detail)
+            - exact: File exists with exact case
+            - case_mismatch: File exists but different case (detail = correct path)
+            - wrong_path: File exists elsewhere (detail = list of correct paths)
+            - missing: File not found
+            """
             if val_norm in exact_relpaths:
                 return "exact", None
 
@@ -741,7 +766,7 @@ class SkinIndex:
 
         logger.info(f"  -> Checked {checked_count} unique image references")
     def _detect_textures_xbt(self):
-        """`True` if a `Textures.xbt` file exists in any of the standard skin locations."""
+        """True if the skin ships a packed Textures.xbt anywhere we know to look."""
         xbt_locations = [
             os.path.join(self.skin.path, 'media', 'Textures.xbt'),
             os.path.join(self.skin.path, 'resources', 'media', 'Textures.xbt'),
@@ -755,7 +780,11 @@ class SkinIndex:
         return False
 
     def _check_font_files(self, index, progress_callback=None):
-        """Pre-resolve font files in the skin's `fonts/` dir so `FontCheck` is I/O-free; core fonts are still resolved at check time (need runtime settings)."""
+        """Pre-stat skin font files so FontCheck can skip disk I/O later.
+
+        Only the skin's own `fonts/` dir is checked here; core Kodi fonts
+        depend on runtime settings and are checked during validation.
+        """
         if 'fonts_defined' not in index:
             return
 

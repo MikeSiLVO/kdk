@@ -1,4 +1,4 @@
-"""Skin resource loading: colors, fonts, media, font references."""
+"""Resource loading for Kodi skins: colors, fonts, and media files."""
 
 import os
 import logging
@@ -11,14 +11,24 @@ logger = logging.getLogger(__name__)
 
 
 class SkinResources:
-    """Load skin resources (colors, fonts, media files) by file path."""
+    """Loads skin resources (colors, fonts, media)."""
 
     def __init__(self, skin_path: str, xml_folders: List[str]):
         self.skin_path = skin_path
         self.xml_folders = xml_folders
 
     def load_colors(self, system_colors_path: Optional[str] = None) -> Tuple[List[Dict], set]:
-        """Load colors from `<skin>/colors/*.xml` plus the resolved Kodi-core `colors.xml` (if `system_colors_path` is provided). Returns `(colors, color_labels)`."""
+        """Load colors from skin and (optionally) Kodi-core paths.
+
+        Loads from:
+          1) <skin>/colors/*.xml (e.g., defaults.xml)
+          2) `system_colors_path`, already resolved by `kodi_refs.kodi_colors_xml`
+             to either the installed Kodi or a bundled snapshot
+
+        Returns (colors_list, color_labels_set):
+          - colors_list: list of dicts with keys name, line, content, file
+          - color_labels_set: set of color names for quick lookup
+        """
         colors = []
 
         if self.skin_path:
@@ -69,7 +79,12 @@ class SkinResources:
         return colors, color_labels
 
     def load_fonts(self, resolver=None) -> Tuple[Dict[str, List[Dict]], Optional[str]]:
-        """Parse `Font.xml`/`font.xml` per folder, expanding `<fontset>` includes via `resolver`. Returns `({folder: [font_dict]}, last_font_file)`."""
+        """Load fonts by parsing Font.xml/font.xml in each folder.
+
+        Also expands includes inside fontsets using the provided resolver.
+        Returns (fonts_dict, font_file_path) where fonts_dict maps each folder
+        to a list of font dicts, and font_file_path is the last processed file.
+        """
         fonts = {}
         font_file = None
 
@@ -129,7 +144,11 @@ class SkinResources:
         return fonts, font_file
 
     def load_media_files(self, media_path: str) -> Generator[str, None, None]:
-        """Yield forward-slash relative paths under `media_path`, skipping `studio/` and `recordlabel/` subtrees."""
+        """Yield relative paths of all files in `media_path`.
+
+        Skips `studio` and `recordlabel` subdirectories. Paths use forward
+        slashes with no leading slash.
+        """
         for path, _, files in os.walk(media_path):
             if "studio" in path or "recordlabel" in path:
                 continue
@@ -142,7 +161,10 @@ class SkinResources:
                 yield img_path
 
     def get_font_references(self, window_files: Dict[str, List[str]]) -> Optional[Dict[str, List[Dict]]]:
-        """Return `{folder: [{file, name, line}]}` from `<font>` references in `window_files`; `None` if any file fails to parse."""
+        """Extract font references from all window files.
+
+        Returns dict[folder -> list of {file, name, line}] or None on error.
+        """
         font_refs = {}
         for folder in self.xml_folders:
             font_refs[folder] = []

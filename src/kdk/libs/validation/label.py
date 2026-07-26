@@ -1,4 +1,4 @@
-"""Label validation: PO translation lookups, untranslated text detection, brand/term allowlists."""
+"""Label validation for Kodi skins."""
 
 import os
 import re
@@ -29,6 +29,7 @@ BRAND_NAMES = {
     'rotten tomatoes', 'metacritic', 'lastfm', 'last.fm',
     'fanart.tv', 'theaudiodb', 'themoviedb', 'thetvdb',
     'google', 'facebook', 'twitter', 'reddit', 'discord',
+    # Added from validation analysis (2025-11-04)
     'wikipedia', 'wiki',  # Encyclopedia/proper nouns
     'libreelec', 'coreelec',  # OS/Platform names
 }
@@ -56,15 +57,24 @@ class ValidationLabel:
         self._validation_index = validation_index
 
     def _is_hex_color(self, text):
-        """`True` if `text` is an 8-char ARGB hex color, case-insensitive."""
+        """
+        Check if text is an ARGB hex color (8-char hex, case-insensitive).
+
+        Examples: ff123456, FF123456, aabbccdd, AABBCCDD
+        """
         text = text.strip()
         if len(text) != 8:
             return False
 
+        # Check if all chars are valid hex: 0-9, a-f, A-F
         return bool(re.match(r'^[0-9a-fA-F]{8}$', text))
 
     def _is_addon_id(self, text):
-        """`True` if `text` looks like a Kodi addon ID (`<script|service|plugin|skin|resource>.<rest>`)."""
+        """
+        Check if text looks like an addon ID.
+
+        Examples: script.cu.lrclyrics, service.library.data.provider, plugin.video.netflix, resource.images.arctic.waves
+        """
         text = text.strip().lower()
         return bool(re.match(r'^(script|service|plugin|skin|resource)\.[a-z0-9._-]+$', text))
 
@@ -151,7 +161,10 @@ class ValidationLabel:
         return True
 
     def check(self, progress_callback=None):
-        """Find untranslated/undefined labels; returns issue dicts with `message`, `file`, `line`."""
+        """Find untranslated/undefined labels.
+
+        Returns list of {"message": str, "file": str, "line": int}.
+        """
         total_files = sum(len(files) for files in self.addon.window_files.values()) if hasattr(self.addon, 'window_files') else 0
 
         if progress_callback:
@@ -400,6 +413,6 @@ class ValidationLabel:
 
 
 def check(addon, validation_index):
-    """Convenience wrapper: instantiate `ValidationLabel` and run `check()`."""
+    """Module-level dispatcher: instantiate ValidationLabel and run it."""
     checker = ValidationLabel(addon, get_po_files_fn=lambda: addon.get_po_files(), validation_index=validation_index)
     return checker.check()

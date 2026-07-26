@@ -1,8 +1,14 @@
-"""Expression validation: catch `$VAR`/`$INFO`/`$LOCALIZE` in tags that Kodi parses as literal-only.
+"""Expression validation for Kodi skins.
 
-Authoritative split (from `GUIControlFactory.cpp`):
-  - `GetInfoLabel`/`GetInfoTexture`/`GetInfoColor` consumers accept expressions.
-  - `XMLUtils::GetInt`/`GetFloat`/`GetString`/`GetTexture` consumers require literals.
+Documents which XML tags support dynamic expressions ($VAR, $INFO, $LOCALIZE)
+and which require literal values. Validates that expressions only appear in
+tags that support them.
+
+Source: Kodi GUIControlFactory.cpp.
+
+CRITICAL DISTINCTION:
+- Tags parsed with GetInfoLabel/GetInfoTexture/GetInfoColor: Support expressions
+- Tags parsed with XMLUtils::GetInt/GetFloat/GetString/GetTexture: Literal only
 """
 
 import logging
@@ -829,12 +835,12 @@ LITERAL_ONLY = {
 
 
 def supports_expressions(tag_name):
-    """`True` if `<tag_name>` accepts dynamic expressions (`$VAR`, `$INFO`, ...)."""
+    """True if `tag_name` supports dynamic expressions ($VAR, $INFO, etc.)."""
     return tag_name in SUPPORTS_EXPRESSIONS
 
 
 def get_tag_info(tag_name):
-    """Return tag metadata `dict` (with `supports_expressions`), or `None` if `tag_name` is unknown."""
+    """Return full info about a tag's expression support, or None if unknown."""
     if tag_name in SUPPORTS_EXPRESSIONS:
         return {
             'supports_expressions': True,
@@ -849,7 +855,23 @@ def get_tag_info(tag_name):
 
 
 def validate_tag_expression(tag_name, value):
-    """Return `(is_valid, message)` based on whether `<tag_name>` accepts the kind of value in `value`."""
+    """Validate if a tag value is appropriate (literal vs expression).
+
+    Returns `(is_valid: bool, message: str)`.
+
+    Examples:
+        >>> validate_tag_expression('label', '$VAR[MyLabel]')
+        (True, 'Tag supports expressions')
+
+        >>> validate_tag_expression('posx', '$VAR[XPos]')
+        (False, 'Tag requires literal value, found expression: $VAR[XPos]')
+
+        >>> validate_tag_expression('texture', '$INFO[ListItem.Art(thumb)]')
+        (True, 'Tag supports expressions')
+
+        >>> validate_tag_expression('texturefocus', '$VAR[ButtonTexture]')
+        (False, 'Tag requires literal value, found expression: $VAR[ButtonTexture]')
+    """
     has_expression = ('$VAR[' in value or '$INFO[' in value or
                      '$LOCALIZE[' in value or '$PARAM[' in value)
 
@@ -877,28 +899,11 @@ class ValidationExpression:
         self.addon = addon
         self._validation_index = validation_index
 
-    def _check_condition(self, condition, expressions):
-        """Why Kodi cannot parse `condition`, or None. `$EXP` is flattened first.
-
-        `expressions` is None when the folder's expression map was never built,
-        in which case anything using $EXP is left alone rather than guessed at.
-        """
-        if expressions is None:
-            if "$EXP[" in condition.upper():
-                return None
-            flattened = condition
-        else:
-            flattened, unknown = utils.flatten_expressions(condition, expressions)
-            if unknown:
-                return f"undefined expression {sorted(unknown)[0]}"
-
-        problem = utils.check_condition(flattened)
-        if not problem or problem[0] != utils.STATE_INVALID:
-            return None
-        return problem[1]
-
     def check(self, progress_callback=None):
-        """Find `$VAR`/`$INFO`/`$LOCALIZE` used in literal-only tags; returns issue dicts with `message`, `file`, `line`."""
+        """
+        Validate that $VAR, $INFO, $LOCALIZE are only used in tags that support expressions.
+        Returns list of {"message": str, "file": str, "line": int}.
+        """
         if progress_callback:
             progress_callback("Validating expression usage in tags...")
 
@@ -927,8 +932,28 @@ class ValidationExpression:
 
         return issues
 
+    def _check_condition(self, condition, expressions):
+        """Why Kodi cannot parse `condition`, or None. `$EXP` is flattened first.
+
+        `expressions` is None when the folder's expression map was never built,
+        in which case anything using $EXP is left alone rather than guessed at.
+        """
+        if expressions is None:
+            if "$EXP[" in condition.upper():
+                return None
+            flattened = condition
+        else:
+            flattened, unknown = utils.flatten_expressions(condition, expressions)
+            if unknown:
+                return f"undefined expression {sorted(unknown)[0]}"
+
+        problem = utils.check_condition(flattened)
+        if not problem or problem[0] != utils.STATE_INVALID:
+            return None
+        return problem[1]
+
     def _check_xml_tree(self, root, file_path, folder=""):
-        """Walk every element under `root` and collect expression-misuse issues for `file_path`."""
+        """Walk `root` and emit issues for expressions used in literal-only tags."""
         issues = []
         expression_map = getattr(self.addon, "expression_map", None) or {}
         expressions = expression_map.get(folder) if folder in expression_map else None
@@ -979,6 +1004,9 @@ class ValidationExpression:
 
 
 def check(addon, validation_index):
-    """Convenience wrapper: instantiate `ValidationExpression` and run `check()` (`validation_index` unused, kept for API parity)."""
+    """Module-level dispatcher: instantiate ValidationExpression and run it.
+
+    `validation_index` is accepted but not used; kept for API consistency.
+    """
     checker = ValidationExpression(addon, validation_index)
     return checker.check()

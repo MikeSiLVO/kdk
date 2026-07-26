@@ -1,29 +1,34 @@
-"""Cross-cutting validation helpers: runtime-file detection, ID normalization, issue dict factory."""
+"""Validation utilities for KodiDevKit."""
 
 import os
 import re
 import logging
 from functools import lru_cache
 
-logger = logging.getLogger("kdk.utils.validation")
+logger = logging.getLogger("KodiDevKit.utils.validation")
 if not logger.handlers:
     logger.addHandler(logging.NullHandler())
 logger.propagate = True
 
 
 def is_runtime_generated_file(file_path):
-    """`True` if `file_path`'s basename starts with `script-skinvariables-` (runtime-generated content)."""
+    """True if `file_path` is a script.skinvariables runtime-generated XML."""
     if not file_path:
         return False
 
     filename = os.path.basename(file_path).lower()
 
-    # script.skinshortcuts is intentionally excluded - its files are author-edited.
+    # Only script-skinvariables-*.xml files (not skinshortcuts per user preference)
+    # Examples: script-skinvariables-labels-includes.xml, script-skinvariables-images-includes.xml
     return filename.startswith('script-skinvariables-')
 
 
 def normalize_control_id(control_id):
-    """Strip leading zeros from a numeric `control_id` (Kodi parses IDs via `XMLUtils::GetInt`, so `"05"` and `"5"` are the same)."""
+    """Strip leading zeros from a numeric control id (Kodi parses ids as ints).
+
+    `"05"` and `"5"` both refer to the same control. Non-numeric ids
+    are returned unchanged.
+    """
     if not control_id or not isinstance(control_id, str):
         return control_id
 
@@ -35,7 +40,7 @@ def normalize_control_id(control_id):
 
 
 def create_issue(message, file="", line=0, **kwargs):
-    """Build a standard issue `dict` (`message`, `file`, `line`, plus any `**kwargs`)."""
+    """Build a validation-issue dict with the standard fields plus any extras."""
     issue = {
         "message": message,
         "file": file,
@@ -49,7 +54,10 @@ _PARAM_PATTERN = re.compile(r'\$PARAM\[([^\]]+)\]')
 
 
 def resolve_param_in_name(name, param_context=None, cache=None):
-    """Resolve `$PARAM[...]` in `name` using `param_context`; undefined params become `""`. Optional `cache` keyed by `(name, frozen-params)`."""
+    """Replace `$PARAM[name]` in `name` using `param_context` (undefined -> '').
+
+    Optional `cache` dict reuses prior results for the same (name, params) pair.
+    """
     if not name or "$PARAM[" not in name:
         return name
 
@@ -74,7 +82,11 @@ def resolve_param_in_name(name, param_context=None, cache=None):
 
 
 def get_all_parameter_contexts(addon, folder):
-    """Return every parameter set seen at include-call sites in `folder`, plus an empty context fallback."""
+    """Return every `$PARAM` context that any include in `folder` is called with.
+
+    Used so a `$PARAM`-bearing name can be tested against every concrete
+    binding to see if any of them resolves to something defined.
+    """
     if not addon._include_usages_built:
         addon.index_builder.build_include_usages()
 
@@ -109,7 +121,10 @@ def deduplicate_issues(issues):
 
 
 def find_unused_items(definitions, references, item_type, skip_filter=None):
-    """Issue dicts for `definitions` of `item_type` whose `name` never appears in `references` (with optional `skip_filter`)."""
+    """Return issue dicts for `definitions` whose name never appears in `references`.
+
+    `skip_filter(node)` lets callers exclude e.g. runtime-generated entries.
+    """
     ref_names = {ref["name"] for ref in references}
     unused = []
 
@@ -132,7 +147,7 @@ def find_unused_items(definitions, references, item_type, skip_filter=None):
 
 
 def find_undefined_items(references, definitions, item_type, skip_filter=None):
-    """Issue dicts for `references` whose `name` doesn't match any `definition` of `item_type` (with optional `skip_filter`)."""
+    """Return reference dicts (annotated with a message) whose name has no matching definition."""
     defined_names = {
         node.get("name")
         for node in definitions
@@ -152,8 +167,8 @@ def find_undefined_items(references, definitions, item_type, skip_filter=None):
 
 
 def resolve_include_content(inc, resolve_callback=None):
-    """Return `inc`'s XML content with `$PARAM` resolved against `inc.params`; delegates to `resolve_callback` if given."""
-    # Lazy import: top-level would cycle through `utils.__init__`.
+    """Return `inc`'s XML body with `$PARAM[...]` placeholders substituted."""
+    # Import here to avoid circular dependency
     from .expressions import resolve_params_in_text
 
     if resolve_callback:
@@ -174,12 +189,15 @@ def resolve_include_content(inc, resolve_callback=None):
 
 @lru_cache(maxsize=128)
 def _get_font_name_pattern(font_name):
-    """Cached regex matching `<name>font_name</name>`."""
+    """Cached `<name>font_name</name>` regex used by find_font_line_in_include."""
     return re.compile(r"<name>\s*%s\s*</name>" % re.escape(font_name), re.I)
 
 
 def find_font_line_in_include(inc, font_name):
-    """Return the 1-based line of the `<font>` opening tag defining `font_name` in `inc['file']`; falls back to `inc['line']`."""
+    """1-based line of the `<font>` block defining `font_name` inside `inc`'s file.
+
+    Falls back to the include's own line if the font can't be located.
+    """
     path = (inc.get("file") or "").strip()
     if not path or not os.path.isfile(path):
         return int(inc.get("line") or 1)
@@ -210,8 +228,9 @@ def _is_runtime_placeholder(text):
 
 
 def find_skinshortcuts_template(addon_path):
-    """Locate `shortcuts/templates.xml` (v3) or `shortcuts/template.xml` (v2); v3 wins if both exist."""
+    """Path to the SkinShortcuts template (`templates.xml` v3 or `template.xml` v2), or None."""
     shortcuts_dir = os.path.join(addon_path, "shortcuts")
+    # v3 first (preferred)
     for filename in ("templates.xml", "template.xml"):
         path = os.path.join(shortcuts_dir, filename)
         if os.path.isfile(path):
@@ -220,7 +239,12 @@ def find_skinshortcuts_template(addon_path):
 
 
 def find_includes_in_skinshortcuts_template(template_path, known_include_names):
-    """Return the subset of `known_include_names` referenced from `template_path` (text, `<include>`, `content`/`include` attrs); ignores `$SKINSHORTCUTS[...]`/`$PROPERTY[...]`."""
+    """Set of skin-include names referenced inside a SkinShortcuts template.
+
+    Scans text bodies plus `content=` / `include=` attributes. References
+    that contain `$SKINSHORTCUTS[...]` or `$PROPERTY[...]` are runtime-only
+    and skipped.
+    """
     from .xml import get_root_from_file
 
     if not os.path.isfile(template_path):
@@ -258,7 +282,11 @@ def find_includes_in_skinshortcuts_template(template_path, known_include_names):
 
 
 def find_variables_in_skinshortcuts_template(template_path, known_variable_names):
-    """Return the subset of `known_variable_names` referenced via `$VAR[...]`/`$ESCVAR[...]` in `template_path` (text + attrs); ignores runtime placeholders."""
+    """Set of skin-variable names referenced inside a SkinShortcuts template.
+
+    Scans text bodies and attribute values for `$VAR[Name]` / `$ESCVAR[Name]`,
+    skipping `$SKINSHORTCUTS[...]` / `$PROPERTY[...]` placeholders.
+    """
     from .xml import get_root_from_file
 
     if not os.path.isfile(template_path):
@@ -298,7 +326,13 @@ def find_variables_in_skinshortcuts_template(template_path, known_variable_names
 
 
 def find_variable_definitions_in_skinshortcuts_template(template_path):
-    """Return `<variable name="X">` names defined in `template_path`; treated as defined so the skin's `$VAR[X]` references don't get flagged."""
+    """Set of `<variable name="...">` names declared inside a SkinShortcuts template.
+
+    These names must be treated as defined even though the skin's own
+    includes don't declare them, since SkinShortcuts emits them into the
+    runtime includes file at boot. Names containing runtime placeholders
+    are skipped (their real name can't be known statically).
+    """
     from .xml import get_root_from_file
 
     if not os.path.isfile(template_path):

@@ -1,4 +1,8 @@
-"""BOM and line-ending validation; Kodi repo submission requires no BOM and Unix line endings."""
+"""
+BOM and line ending validation for Kodi skins.
+
+Kodi repo submission requires no BOM and Unix line endings.
+"""
 
 from __future__ import annotations
 
@@ -38,8 +42,8 @@ class ValidationFileCheck:
                     "severity": SEVERITY_ERROR,
                 })
 
-        # EOL check - text files only (binary files like .png/.ttf contain
-        # 0x0D 0x0A byte sequences that are not line endings)
+        # Text types only: binaries such as PNGs routinely contain 0D 0A and
+        # would otherwise be reported as having Windows line endings.
         result = utils.eol_info_from_path_patterns(
             [self.addon.path],
             recursive=True,

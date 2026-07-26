@@ -1,4 +1,4 @@
-"""`Addon` model: parses `addon.xml`, tracks XML folders, includes, fonts, colors, and PO files."""
+"""KodiDevKit Sublime Text plugin: base addon model."""
 
 from __future__ import annotations
 
@@ -15,9 +15,11 @@ if not logger.handlers:
     logger.addHandler(logging.NullHandler())
 logger.propagate = True
 
+SETTINGS_FILE = 'kodidevkit.sublime-settings'
+
 
 class Addon(object):
-    """A Kodi addon: rooted at `path`, configured via `settings`."""
+    """A Kodi addon: addon.xml metadata, language files, xml folders."""
 
     # Single source of truth for supported Kodi releases.
     # When the next Kodi version is cut, append a new dict here.
@@ -62,7 +64,6 @@ class Addon(object):
 
         self.api_version = self._resolve_release()
 
-        # Basic metadata
         self.version = self.root.attrib.get("version")
         for item in self.root.xpath("/addon[@id]"):
             self.name = item.attrib["id"]
@@ -94,15 +95,11 @@ class Addon(object):
 
     @property
     def default_xml_folder(self):
-        """
-        returns the fallback xml folder as a string
-        """
+        """returns the fallback xml folder as a string"""
         return self.xml_folders[0]
 
     def load_xml_folders(self):
-        """
-        find and load skin xml folder if existing
-        """
+        """find and load skin xml folder if existing"""
         paths = [os.path.join(self.path, "resources", "skins", "Default", "720p"),
                  os.path.join(self.path, "resources", "skins", "Default", "1080i")]
         folder = utils.check_paths(paths)
@@ -111,23 +108,17 @@ class Addon(object):
 
     @property
     def lang_path(self):
-        """
-        returns the add-on language folder path
-        """
+        """returns the add-on language folder path"""
         return os.path.join(self.path, "resources", "language")
 
     @property
     def changelog_path(self):
-        """
-        returns the add-on language folder path
-        """
+        """Path to `changelog.txt`."""
         return os.path.join(self.path, "changelog.txt")
 
     @property
     def primary_lang_folder(self):
-        """
-        returns default language folder (first one from settings file)
-        """
+        """returns default language folder (first one from settings file)"""
         lang_folders = self.settings.get("language_folders")
         if not lang_folders:
             lang_folders = ["resource.language.en_gb"]
@@ -139,9 +130,7 @@ class Addon(object):
 
     @property
     def media_path(self):
-        """
-        returns the add-on media folder path
-        """
+        """returns the add-on media folder path"""
         return os.path.join(self.path, "resources", "skins", "Default", "media")
 
     @staticmethod
@@ -156,9 +145,7 @@ class Addon(object):
             return Addon(path=path, settings=settings)
 
     def update_labels(self):
-        """
-        get addon po files and update po files list
-        """
+        """get addon po files and update po files list"""
         self.po_files = self.get_po_files(self.lang_path)
 
     def get_po_files(self, folder):
@@ -190,9 +177,7 @@ class Addon(object):
         return po_files
 
     def update_xml_files(self):
-        """
-        update list of all include and window xmls
-        """
+        """update list of all include and window xmls"""
         self.window_files = {}
         for path in self.xml_folders:
             xml_folder = os.path.join(self.path, path)
@@ -207,9 +192,7 @@ class Addon(object):
                     self.window_files[path].append(xml_file)
 
     def create_new_label(self, word, filepath):
-        """
-        adds a label to the first pofile from settings (or creates new one if non-existing)
-        """
+        """adds a label to the first pofile from settings (or creates new one if non-existing)"""
         if not self.po_files:
             po_file = utils.create_new_po_file(os.path.join(self.primary_lang_folder, "strings.po"))
             po_file.save()
@@ -238,34 +221,27 @@ class Addon(object):
         return label_id
 
     def attach_occurrence_to_label(self, label_id, rel_path):
-        """
-        add *rel_path to label with *label id as a file comment
-        """
+        """Add `rel_path` as an occurrence on the PO entry for `label_id`."""
         if 31000 <= int(label_id[1:]) < 33000:
             entry = self.po_files[0].find(label_id, by="msgctxt")
             entry.occurrences.append((rel_path, None))
             self.po_files[0].save()
 
     def translate_path(self, path):
-        """
-        return translated path for textures
-        """
+        """return translated path for textures"""
         if path.startswith("special://skin/"):
             return os.path.join(self.path, path.replace("special://skin/", ""))
         else:
             return os.path.join(self.media_path, path)
 
     def return_node(self, keyword=None, folder=False):
-        """
-        get value from include list
+        """Look up `keyword` as a font or include in `folder`.
 
-        Supports lookups with parameters like "MyVar,(prefix,suffix)"
-        by extracting just the variable/include name before the first comma.
+        Strips any param tail (`Name,arg1,arg2` -> `Name`).
         """
         if not keyword or not folder:
             return None
 
-        # e.g., "MyVar,(prefix,suffix)" -> "MyVar"
         lookup_name = keyword.split(',')[0] if ',' in keyword else keyword
 
         if folder in self.fonts:
@@ -279,24 +255,18 @@ class Addon(object):
         return None
 
     def reload(self, path):
-        """
-        update include, color and font infos (not needed yet for python)
-        """
+        """No-op for python addons; overridden by Skin."""
         pass
 
     def get_xml_files(self):
-        """
-        yields absolute paths of all window files
-        """
+        """yields absolute paths of all window files"""
         if self.xml_folders:
             for folder in self.xml_folders:
                 for xml_file in self.window_files[folder]:
                     yield os.path.join(self.path, folder, xml_file)
 
     def bump_version(self, version):
-        """
-        bump addon.xml version and create changelog entry
-        """
+        """bump addon.xml version and create changelog entry"""
         self.root.attrib["version"] = version
         utils.save_xml(self.xml_file, self.root)
         with open(self.changelog_path, "r") as f:
@@ -306,9 +276,7 @@ class Addon(object):
             changelog_file.write("\n".join(contents))
 
     def get_constants(self, folder):
-        """
-        returns empty list because Kodi python add-ons do not support constants yet
-        """
+        """returns empty list because Kodi python add-ons do not support constants yet"""
         return []
 
     @staticmethod

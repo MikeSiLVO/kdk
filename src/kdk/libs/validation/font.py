@@ -1,4 +1,4 @@
-"""Font validation: declared fonts, file presence, case mismatches, and required-font checks."""
+"""Font validation for Kodi skins."""
 
 from __future__ import annotations
 
@@ -24,7 +24,10 @@ class ValidationFont:
         self._validation_index = validation_index
 
     def check(self, progress_callback=None):
-        """Validate font declarations and usage; returns issue dicts with `message`, `file`, `line`, `severity`."""
+        """
+        Validate fonts declared by the skin.
+        Returns list of {"message": str, "file": str, "line": int}.
+        """
         def row(message, file_path="", line=0, severity=SEVERITY_ERROR):
             return {"message": message, "file": file_path, "line": line, "severity": severity}
 
@@ -355,6 +358,6 @@ class ValidationFont:
 
 
 def check(addon, validation_index):
-    """Convenience wrapper: instantiate `ValidationFont` and run `check()`."""
+    """Module-level dispatcher: instantiate ValidationFont and run it."""
     checker = ValidationFont(addon, validation_index=validation_index)
     return checker.check()

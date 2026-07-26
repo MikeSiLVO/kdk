@@ -1,4 +1,4 @@
-"""XML parsing helpers: cached `lxml` parse, bracket balance checker, dynamic-content detection."""
+"""XML parsing and validation utilities for KodiDevKit."""
 
 import os
 import re
@@ -7,7 +7,7 @@ import logging
 from lxml import etree as ET
 from lxml.etree import XMLSyntaxError
 
-logger = logging.getLogger("kdk.utils.xml")
+logger = logging.getLogger("KodiDevKit.utils.xml")
 if not logger.handlers:
     logger.addHandler(logging.NullHandler())
 logger.propagate = True
@@ -57,11 +57,17 @@ def _extract_type_attr(text, attr_start, attr_end):
 
 
 def _check_tag_balance(xml_file):
-    """Stack-based tag balance check; returns `{message, line}` pointing at the unclosed *opening* tag, or `None` if balanced.
+    """Stack-based tag balance checker that pinpoints the actual error location.
 
-    Better than lxml's location for unclosed tags - lxml reports where the mismatch surfaces,
-    not where it started. Knows that only `<control type="group">` can contain other controls,
-    so a sibling of the same non-group type immediately implies an unclosed parent.
+    Unlike lxml which reports where it detected the problem (usually a closing
+    tag far from the mistake), this walks the file tracking open/close tags and
+    reports the opening tag that has no matching close.
+
+    For <control> siblings with the same type attribute (e.g. multiple
+    grouplist controls), detects the unclosed tag immediately when the next
+    sibling of the same type opens; only group type can self-nest.
+
+    Returns dict with message/line on error, or None if no mismatch found.
     """
     try:
         with open(xml_file, 'r', encoding='utf-8', errors='replace') as f:
@@ -200,7 +206,12 @@ def _check_tag_balance(xml_file):
 
 
 def get_root_from_file(xml_file):
-    """Parse `xml_file` (cached on `(mtime, size)` to survive sub-second edits within filesystem mtime granularity)."""
+    """Return XML root node from file with mtime+size-based caching.
+
+    Cache is validated using both mtime and file size to prevent stale caches
+    when files are modified rapidly (within filesystem mtime granularity).
+    This adds zero overhead since os.stat() returns both values.
+    """
     if not os.path.isfile(xml_file):
         # Truncate to avoid dumping entire XML strings into the log
         preview = repr(xml_file)[:80]
@@ -238,7 +249,7 @@ def get_root_from_file(xml_file):
 
 
 def check_brackets(label):
-    """`True` if `< ( { [` characters in `label` are correctly nested and balanced with their counterparts."""
+    """check if all brackets in `label` match, return True / False"""
     stack = []
     push_chars, pop_chars = "<({[", ">)}]"
     for c in label:
@@ -256,18 +267,25 @@ def check_brackets(label):
 
 
 def file_needs_expansion(path, max_bytes=FILE_PREVIEW_SIZE):
-    """Cheap check (read up to `max_bytes`): `True` if `path` contains `$PARAM[` or `<include`."""
+    """Quick check if `path` likely needs include/param expansion.
+
+    Reads the first `max_bytes` and looks for `$PARAM[` or `<include`. Used
+    to avoid the expensive expansion pass on static files.
+    """
     try:
         with open(path, 'r', encoding='utf-8', errors='ignore') as f:
             content = f.read(max_bytes)
             return '$PARAM[' in content or '<include' in content
     except Exception:
-        # Assume it does so we don't silently skip expansion on a transient read failure.
+        # If we can't read the file, assume it needs expansion to be safe
         return True
 
 
 def tree_needs_expansion(root):
-    """Same as `file_needs_expansion` but on a parsed `root` (no file I/O)."""
+    """True if the already-parsed `root` likely needs expansion.
+
+    Skips a file read; use this when you already have the tree in memory.
+    """
     if root is None:
         return False
 

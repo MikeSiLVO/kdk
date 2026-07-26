@@ -1,4 +1,4 @@
-"""Validation constants: control-tag tables, allowed-value enums, severity codes."""
+"""Constants and data tables for Kodi skin validation: control tags, allowed values, validation rules."""
 
 from __future__ import annotations
 from lxml import etree as ET

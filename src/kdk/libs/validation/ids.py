@@ -28,7 +28,10 @@ class ValidationIds:
         self._validation_index = validation_index
 
     def check(self, progress_callback=None):
-        """Find undefined/invalid control and window IDs; returns issue dicts with `message`, `file`, `line`."""
+        """
+        Check undefined or invalid control/window IDs.
+        Returns list of {"message": str, "file": str, "line": int}.
+        """
         if self._validation_index:
             total_ids = sum(len(ids) for ids in self._validation_index.get('ids_defined', {}).values())
             total_files = sum(len(files) for files in self._validation_index.get('window_includes', {}).values())

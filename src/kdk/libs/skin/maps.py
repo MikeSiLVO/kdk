@@ -1,4 +1,4 @@
-"""`SkinMaps`: the 5-map structure (`includes`/`constants`/`variables`/`expressions`/`defaults`) matching `CGUIIncludes`."""
+"""SkinMaps: Kodi's 5-map include/constant/variable/expression/default structure."""
 
 from __future__ import annotations
 

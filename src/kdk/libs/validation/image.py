@@ -1,4 +1,4 @@
-"""Image validation: file presence, case mismatches, wrong paths; honors `Textures.xbt`."""
+"""Image validation for Kodi skins."""
 
 from __future__ import annotations
 
@@ -16,7 +16,10 @@ class ValidationImage:
         self._validation_index = validation_index
 
     def check(self, progress_callback=None):
-        """Validate image references; returns issue dicts with `message`, `file`, `line`, `severity`."""
+        """
+        Validate image references used by the current skin.
+        Returns list of {"message": str, "file": str, "line": int, "severity": str}.
+        """
         if not self.addon:
             return [{"message": "Image checker unavailable (no addon)", "file": "", "line": 0}]
 

@@ -1,4 +1,4 @@
-"""Resolution engine: applies defaults, constants, expressions, and includes (with `$PARAM`). Matches `CGUIIncludes.cpp`."""
+"""Include / constant / expression / default resolver, mirroring CGUIIncludes."""
 
 from __future__ import annotations
 from typing import TYPE_CHECKING
@@ -16,12 +16,16 @@ logger = logging.getLogger(__name__)
 
 
 class SkinResolution:
-    """Resolves includes/constants/expressions/defaults; mirrors Kodi's `CGUIIncludes` pipeline."""
+    """
+    Resolves includes, constants, expressions, and defaults in Kodi skin XML.
+
+    Matches Kodi's CGUIIncludes resolution pipeline exactly.
+    """
 
     def __init__(self, include_maps: SkinMaps, skin_path: str):
         self.include_maps = include_maps
         self.skin_path = skin_path
-        
+
         self.include_map = include_maps.includes
         self.default_map = include_maps.defaults
         self.constant_map = include_maps.constants
@@ -29,7 +33,16 @@ class SkinResolution:
         self.expression_map = include_maps.expressions
 
     def resolve(self, node, folder: str, *, source_file: str = ""):
-        """Apply (in order) defaults, constants, expressions, includes+`$PARAM`, then recurse. Matches `CGUIIncludes::Resolve` (`GUIIncludes.cpp:270-287`)."""
+        """
+        Main resolution entry point matching Kodi's CGUIIncludes::Resolve (GUIIncludes.cpp:270-287).
+
+        Resolution order:
+        1. SetDefaults - Apply control defaults
+        2. ResolveConstants - Expand constants
+        3. ResolveExpressions - Expand $EXP references (with circular detection)
+        4. ResolveIncludes - Splice includes with $PARAM substitution
+        5. Recurse to children
+        """
         if node is None:
             return
 
@@ -288,7 +301,8 @@ class SkinResolution:
 
 
     def _insert_nested(self, parent_node, include_node, inserted_node):
-        """Splice the include call's children into `<nested />` markers. Matches `CGUIIncludes::InsertNested` (`GUIIncludes.cpp:471-504`)."""
+        """Insert call-site children at `<nested/>` markers
+        (CGUIIncludes::InsertNested, GUIIncludes.cpp:471-504)."""
         if inserted_node.tag == "nested":
             nested = inserted_node
             target = parent_node
@@ -309,7 +323,8 @@ class SkinResolution:
                 parent_node.remove(inserted_node)
 
     def _resolve_params_for_node(self, node, params: dict, include_node=None):
-        """Recursively resolve `$PARAM[...]` in `node`'s attrs/text using `params`. Matches `CGUIIncludes::ResolveParametersForNode` (`GUIIncludes.cpp:549-606`)."""
+        """Recursively expand `$PARAM[]` in `node`'s attribs and text
+        (CGUIIncludes::ResolveParametersForNode, GUIIncludes.cpp:549-606)."""
         if node is None:
             return
 

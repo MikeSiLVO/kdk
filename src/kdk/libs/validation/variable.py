@@ -1,4 +1,4 @@
-"""Variable (`$VAR`) validation: defined-but-unused, used-but-undefined, parameter resolution."""
+"""Variable validation for Kodi skins."""
 
 import os
 import re
@@ -10,12 +10,21 @@ logger = logging.getLogger(__name__)
 
 
 def strip_xml_comments(content):
-    """Strip `<!-- ... -->` from `content`."""
+    """Remove all `<!-- ... -->` comments from `content`."""
     return re.sub(r'<!--.*?-->', '', content, flags=re.DOTALL)
 
 
 def extract_variable_name_with_nested_brackets(match_text):
-    r"""Extract a variable name from `$VAR[...]` / `$ESCVAR[...]`, balancing nested `[...]` (e.g. `$PARAM[id]` inside)."""
+    r"""Extract variable name from `$VAR[...]`, handling nested brackets (e.g. `$PARAM[...]` inside).
+
+    The simple regex `\$VAR\[(.*?)\]` fails for nested brackets:
+    - Input: `$VAR[Label_Title_C$PARAM[id]3]`
+    - Broken regex captures: `Label_Title_C$PARAM[id` (stops at first `]`)
+    - This function captures: `Label_Title_C$PARAM[id]3`
+
+    Returns an empty string if no matching closing bracket is found.
+    """
+    # Find the start position after $VAR[ or $ESCVAR[
     start_pos = match_text.find('[')
     if start_pos == -1:
         return ''
@@ -27,8 +36,10 @@ def extract_variable_name_with_nested_brackets(match_text):
         elif char == ']':
             bracket_count -= 1
             if bracket_count == 0:
+                # Found the matching closing bracket
                 return match_text[start_pos+1:i]
 
+    # Malformed - no matching closing bracket
     return ''
 
 
@@ -37,8 +48,7 @@ class ValidationVariable:
 
     def __init__(self, addon):
         self.addon = addon
-        # Keyed by `(var_name, frozenset(params))` because the same variable
-        # resolves differently per parameter set.
+        # Cache for parameter resolution: (var_name, frozenset(params)) -> resolved_name
         self._resolution_cache = {}
 
     def _resolve_param_in_variable_name(self, var_name, param_context=None):

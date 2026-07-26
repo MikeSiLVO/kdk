@@ -11,7 +11,7 @@ modify entries, comments or metadata, etc. or create new po files from scratch.
 **polib** provides a simple and pythonic API via the :func:`~polib.pofile` and
 :func:`~polib.mofile` convenience functions.
 
-**Vendored fork. Based on polib by David Jean Louis.**
+**polib fork for KodiDevKit. Based on polib by David Jean Louis**
 """
 
 import array

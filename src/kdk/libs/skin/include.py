@@ -1,4 +1,4 @@
-"""`SkinInclude`: dict-like wrapper around an `<include>` node, with `CGUIIncludes` constant/expression whitelists."""
+"""SkinInclude: one <include> definition plus Kodi's constant/expression whitelists."""
 
 from __future__ import annotations
 
@@ -73,16 +73,10 @@ class SkinInclude(dict):
 
     @property
     def line(self):
-        """
-        returns xml source line
-        """
         return self.node.sourceline
 
     @property
     def tag(self):
-        """
-        returns tag of include node
-        """
         return self.node.tag
 
     @property
@@ -117,15 +111,10 @@ class SkinInclude(dict):
 
     @property
     def name(self):
-        """
-        returns name of include
-        """
         return self.node.attrib.get("name")
 
     @property
     def filename(self):
-        """
-        returns filename of include parent file
-        """
+        """returns filename of include parent file"""
         return os.path.basename(self.file)
 
