@@ -23,7 +23,6 @@ if not logger.handlers:
     logger.addHandler(logging.NullHandler())
 logger.propagate = True
 
-logger.setLevel(logging.INFO)
 
 FILE_PREVIEW_SIZE = 50_000
 
@@ -38,61 +37,57 @@ class Skin(addon.Addon):
         super().__init__(*args, **kwargs)
         self.type = "skin"
 
-        # Kodi-style include caches matching CGUIIncludes structure
-        # These are populated eagerly at skin load (update_include_list)
-        # and used lazily during window resolution (resolve methods)
-
-        # Maps: folder -> {name -> (Include, default_params)}
-        # Stores <include name="X"> definitions with their default parameters
+        # Kodi-aligned include caches mirroring CGUIIncludes' five maps.
+        # folder -> {name -> (Include, default_params, file_path)}
         self.include_map = {}
-
-        # Maps: folder -> {control_type -> Include}
-        # Stores <default type="button"> etc for applying to matching controls
+        # folder -> {control_type -> (Include, file_path)}
         self.default_map = {}
-
-        # Maps: folder -> {name -> string_value}
-        # Stores <constant name="X">value</constant> for simple substitution
+        # folder -> {name -> str}
         self.constant_map = {}
-
-        # Maps: folder -> {name -> Include}
-        # Stores <variable name="X"> definitions (not expanded, just indexed)
+        # folder -> {name -> (file, line)} for jump-to-definition.
+        self.constant_source_map = {}
+        # folder -> {name -> (Include, file_path)}
         self.variable_map = {}
-
-        # Maps: folder -> {name -> string_value}
-        # Stores <expression name="X">condition</expression> wrapped in [...]
+        # folder -> {name -> str (already wrapped in [...])}
         self.expression_map = {}
+        # folder -> {name -> (file, line)} for jump-to-definition (expression_map
+        # only stores the value, not where it came from).
+        self.expression_source_map = {}
 
-        # Maps: folder -> {include_name -> [{'params': {name: value}, 'file': path, 'line': num}]}
-        # Tracks where includes are USED with what parameter values (for context-aware validation)
+        # folder -> {include_name -> [{'params': {...}, 'file', 'line'}]}
+        # for context-aware validation; built lazily.
         self.include_usages = {}
-        self._include_usages_built = False  # Lazy building flag
+        self._include_usages_built = False
 
-        # Cache for resolved window trees (RAM cache for performance)
         self._resolved_windows_cache: dict = {}
 
-        api_version = self.root.find(".//import[@addon='xbmc.gui']").attrib.get("version")
-        logger.info("xbmc.gui API version: %s", api_version)
-        parsed_api_version = self._safe_version_tuple(api_version)
-        if parsed_api_version is not None:
-            for item in self.RELEASES:
-                target_version = self._safe_version_tuple(item["gui_version"])
-                if target_version is None:
-                    continue
-                if parsed_api_version <= target_version:
-                    self.api_version = item["name"]
-                    break
         self.load_xml_folders()
         self.update_include_list()
 
         self._load_colors_and_fonts()
 
-        self.validation_index = None  # Built on-demand for performance
+        self.validation_index = None
 
         self.builtin_controls, self.builtin_filename_map = self._load_builtin_controls()
 
-        self._resolver = None  # IncludeResolver instance
-        self._index_builder = None  # ValidationIndexBuilder instance
-        self._resource_loader = None  # ResourceLoader instance
+        self._resolver = None
+        self._index_builder = None
+        self._resource_loader = None
+
+    def _release_from_addon_xml(self) -> str | None:
+        """Oldest release whose xbmc.gui version satisfies this skin's import."""
+        node = self.root.find(".//import[@addon='xbmc.gui']")
+        if node is None:
+            return None
+        wanted = self._safe_version_tuple(node.attrib.get("version"))
+        logger.info("xbmc.gui API version: %s", node.attrib.get("version"))
+        if wanted is None:
+            return None
+        for item in self.RELEASES:
+            target = self._safe_version_tuple(item["gui_version"])
+            if target is not None and wanted <= target:
+                return item["name"]
+        return None
 
     @property
     def resolver(self) -> "SkinResolution":
@@ -191,30 +186,6 @@ class Skin(addon.Addon):
             logger.warning("Failed to load built-in controls: %s", e)
             return builtin_controls, filename_to_window
 
-    def _discover_addon_root(self):
-        """Locate the directory containing `addon.xml`: walk up from active file, then open folders, then shallow-search."""
-        import os
-
-        def upward_find(start):
-            d = start
-            for _ in range(10):
-                if os.path.isfile(os.path.join(d, "addon.xml")):
-                    return d
-                parent = os.path.dirname(d)
-                if not parent or parent == d:
-                    break
-                d = parent
-            return None
-
-        candidates = [os.getcwd()]
-
-        for start in candidates:
-            found = upward_find(os.path.abspath(start))
-            if found:
-                return found
-
-        return None
-
     def load_xml_folders(self):
         """Read every `<res folder=...>` from `addon.xml` into `xml_folders`."""
         self.xml_folders = list(dict.fromkeys(
@@ -270,10 +241,14 @@ class Skin(addon.Addon):
             self.default_map = {}
         if not hasattr(self, "constant_map"):
             self.constant_map = {}
+        if not hasattr(self, "constant_source_map"):
+            self.constant_source_map = {}
         if not hasattr(self, "variable_map"):
             self.variable_map = {}
         if not hasattr(self, "expression_map"):
             self.expression_map = {}
+        if not hasattr(self, "expression_source_map"):
+            self.expression_source_map = {}
 
         self.validation_index = None
 
@@ -283,13 +258,15 @@ class Skin(addon.Addon):
                      os.path.join(xml_folder, "includes.xml")]
             self.include_files[folder] = []
 
-            # Clear all maps for this folder to prevent stale entries accumulating over time
-            # This is critical for long-running Sublime sessions where includes are added/removed
+            # Wipe stale per-folder entries before reloading so renamed/deleted
+            # includes don't linger in long-running Sublime sessions.
             self.include_map[folder] = {}
             self.default_map[folder] = {}
             self.constant_map[folder] = {}
+            self.constant_source_map[folder] = {}
             self.variable_map[folder] = {}
             self.expression_map[folder] = {}
+            self.expression_source_map[folder] = {}
 
             include_file = utils.check_paths(paths)
             if include_file:
@@ -323,10 +300,14 @@ class Skin(addon.Addon):
             self.default_map = {}
         if not hasattr(self, "constant_map"):
             self.constant_map = {}
+        if not hasattr(self, "constant_source_map"):
+            self.constant_source_map = {}
         if not hasattr(self, "variable_map"):
             self.variable_map = {}
         if not hasattr(self, "expression_map"):
             self.expression_map = {}
+        if not hasattr(self, "expression_source_map"):
+            self.expression_source_map = {}
 
         if not os.path.exists(xml_file):
             logger.info("Could not find include file %s", xml_file)
@@ -346,14 +327,18 @@ class Skin(addon.Addon):
             self.default_map[folder] = {}
         if folder not in self.constant_map:
             self.constant_map[folder] = {}
+        if folder not in self.constant_source_map:
+            self.constant_source_map[folder] = {}
         if folder not in self.variable_map:
             self.variable_map[folder] = {}
         if folder not in self.expression_map:
             self.expression_map[folder] = {}
+        if folder not in self.expression_source_map:
+            self.expression_source_map[folder] = {}
 
         self._load_defaults(root, folder, xml_file)
-        self._load_constants(root, folder)
-        self._load_expressions(root, folder)
+        self._load_constants(root, folder, xml_file)
+        self._load_expressions(root, folder, xml_file)
         self._load_variables(root, folder, xml_file)
         self._load_includes(root, folder, xml_file)
 
@@ -370,20 +355,24 @@ class Skin(addon.Addon):
             if control_type and node.find("*") is not None:  # has children
                 self.default_map[folder][control_type] = (node, xml_file)
 
-    def _load_constants(self, root, folder):
-        """Load <constant name="X">value</constant>. Matches CGUIIncludes::LoadConstants."""
+    def _load_constants(self, root, folder, xml_file):
+        """Index <constant name="X">value</constant> (CGUIIncludes::LoadConstants)."""
         for node in root.findall("constant"):
             name = node.attrib.get("name")
             if name and node.text:
                 self.constant_map[folder][name] = node.text.strip()
+                self.constant_source_map[folder][name] = (
+                    xml_file, node.sourceline if hasattr(node, 'sourceline') else 0)
 
-    def _load_expressions(self, root, folder):
-        """Load <expression name="X">condition</expression>. Matches CGUIIncludes::LoadExpressions."""
+    def _load_expressions(self, root, folder, xml_file):
+        """Index <expression name="X">cond</expression>, wrapped in [...] like Kodi
+        does (GUIIncludes.cpp:119)."""
         for node in root.findall("expression"):
             name = node.attrib.get("name")
             if name and node.text:
-                # Wrap in [...] like Kodi does (line 119 in GUIIncludes.cpp)
                 self.expression_map[folder][name] = "[" + node.text.strip() + "]"
+                self.expression_source_map[folder][name] = (
+                    xml_file, node.sourceline if hasattr(node, 'sourceline') else 0)
 
     def _load_variables(self, root, folder, xml_file):
         """Load `<variable name="X">` (raw nodes; resolved lazily). Matches `CGUIIncludes::LoadVariables`."""
@@ -409,7 +398,6 @@ class Skin(addon.Addon):
                     param_value = p.text.strip()
                 params[param_name] = param_value or ""
 
-            # No Include object creation = 400x faster!
             self.include_map[folder][name] = (node, params, xml_file)
 
     def update_xml_files(self):

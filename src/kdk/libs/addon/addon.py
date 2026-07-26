@@ -27,10 +27,8 @@ class Addon(object):
     #   "prerelease:<glob>" - latest release tag, prereleases allowed
     #   "branch:<name>"     - that branch's HEAD (e.g. "branch:master")
     RELEASES = [
-        {"name": "omega", "gui_version": "5.17.0", "python_version": "3.0.1",
-         "github_ref": "release:21.*-Omega"},
-        {"name": "piers", "gui_version": "5.18.0", "python_version": "3.0.1",
-         "github_ref": "branch:master"},
+        {"name": "omega", "gui_version": "5.17.0", "github_ref": "release:21.*-Omega"},
+        {"name": "piers", "gui_version": "5.18.0", "github_ref": "branch:master"},
     ]
 
     LANG_START_ID = 32000
@@ -51,10 +49,9 @@ class Addon(object):
 
         self.settings: dict | Any = kwargs.get("settings") or {}
 
-        # Accept both legacy and new kwarg names
-        path = kwargs.get("path") or kwargs.get("project_path")
+        path = kwargs.get("path")
         if not path or not isinstance(path, str):
-            raise ValueError("Addon requires 'path' or 'project_path' argument as string")
+            raise ValueError("Addon requires 'path' argument as string")
         self.path: str = path
 
         self.xml_file = os.path.join(self.path, "addon.xml")
@@ -63,19 +60,7 @@ class Addon(object):
             raise ValueError(f"Failed to parse addon.xml at {self.xml_file}")
         self.root = root
 
-        # Determine API name from xbmc.python import
-        api_import = self.root.find(".//import[@addon='xbmc.python']")
-        if api_import is not None:
-            api_version = api_import.attrib.get("version")
-            parsed_api_version = self._safe_version_tuple(api_version)
-            if parsed_api_version is not None:
-                for item in self.RELEASES:
-                    target_version = self._safe_version_tuple(item["python_version"])
-                    if target_version is None:
-                        continue
-                    if parsed_api_version <= target_version:
-                        self.api_version = item["name"]
-                        break
+        self.api_version = self._resolve_release()
 
         # Basic metadata
         self.version = self.root.attrib.get("version")
@@ -86,6 +71,26 @@ class Addon(object):
         self.load_xml_folders()
         self.update_xml_files()
         self.update_labels()
+
+    def _release_from_addon_xml(self) -> str | None:
+        """Release implied by addon.xml, or None when it carries no usable signal.
+
+        Every release since Matrix declares xbmc.python 3.0.1, so that import
+        cannot tell them apart. Only skins can answer, from their xbmc.gui
+        version, and they override this.
+        """
+        return None
+
+    def _resolve_release(self) -> str:
+        """Kodi release this project targets: explicit setting, then addon.xml,
+        then the newest supported release."""
+        override = str(self.settings.get("kodi_release") or "").strip().lower()
+        if override:
+            if any(item["name"] == override for item in self.RELEASES):
+                return override
+            logger.warning("Unknown kodi_release %r; supported: %s", override,
+                           ", ".join(item["name"] for item in self.RELEASES))
+        return self._release_from_addon_xml() or self.RELEASES[-1]["name"]
 
     @property
     def default_xml_folder(self):
@@ -148,11 +153,9 @@ class Addon(object):
         root = utils.get_root_from_file(xml_file)
         if root is None or root.find(".//import[@addon='xbmc.python']") is None:
             from .. import skin
-            return skin.Skin(project_path=project_path,
-                             settings=settings)
+            return skin.Skin(path=project_path, settings=settings)
         else:
-            return Addon(project_path=project_path,
-                         settings=settings)
+            return Addon(path=project_path, settings=settings)
 
     def update_labels(self):
         """
