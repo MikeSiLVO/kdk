@@ -44,6 +44,12 @@ jobs:
       - name: Run test suite
         run: pytest tests/ -q
 
+      - name: Lint
+        run: ruff check .
+
+      - name: Type check
+        run: pyright
+
       - name: Verify entry points
         run: |
           kdk --help
