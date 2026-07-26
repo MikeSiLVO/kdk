@@ -1,4 +1,4 @@
-"""CLI entry point; subcommands are `validate` and `gui` (run `kdk --help` for details)."""
+"""CLI entry point; `kdk validate` is the only subcommand (run `kdk --help` for details)."""
 
 from __future__ import annotations
 
@@ -8,6 +8,10 @@ import logging
 import os
 import sys
 
+# These narrate the same steps the progress callback already prints, so at INFO
+# they double every line. Their detail is still there under --debug.
+ECHOES_PROGRESS = ("kdk.libs.skin.index",)
+
 
 def setup_logging(debug: bool = False):
     logging.basicConfig(
@@ -16,6 +20,9 @@ def setup_logging(debug: bool = False):
     )
     # The engine reports progress at INFO; surface it without unmuting third parties.
     logging.getLogger("kdk").setLevel(logging.DEBUG if debug else logging.INFO)
+    if not debug:
+        for name in ECHOES_PROGRESS:
+            logging.getLogger(name).setLevel(logging.WARNING)
 
 
 def real_issues(issues):
@@ -83,10 +90,12 @@ def cmd_validate(args):
         print()
         return 1 if errors > 0 else 0
 
-    print(file=sys.stderr)
-    print(f"  Skin: {result['skin_name']}", file=sys.stderr)
-    print(f"  Time: {result['duration']:.1f}s", file=sys.stderr)
-    print(file=sys.stderr)
+    # The summary is the result, so it goes to stdout and survives a redirect;
+    # progress above stays on stderr so it still shows on the terminal.
+    print()
+    print(f"  Skin: {result['skin_name']}")
+    print(f"  Time: {result['duration']:.1f}s")
+    print()
 
     total_errors = 0
     total_warnings = 0
@@ -110,14 +119,14 @@ def cmd_validate(args):
         if other:
             parts.append(f"{other} issue{'s' if other != 1 else ''}")
 
-        print(f"  {category:20s} {', '.join(parts)}", file=sys.stderr)
+        print(f"  {category:20s} {', '.join(parts)}")
 
-    print(file=sys.stderr)
-    print(f"  Total: {total_errors} errors, {total_warnings} warnings", file=sys.stderr)
+    print()
+    print(f"  Total: {total_errors} errors, {total_warnings} warnings")
 
     if args.report or args.output:
         report_path = save_report(result, args.output)
-        print(f"\n  Report saved: {report_path}", file=sys.stderr)
+        print(f"\n  Report saved: {report_path}")
 
     return 1 if total_errors > 0 else 0
 
@@ -132,6 +141,10 @@ def main():
     subparsers = parser.add_subparsers(dest="command")
 
     p_validate = subparsers.add_parser("validate", help="Validate a Kodi skin")
+    # SUPPRESS so omitting it here does not overwrite the same flag given
+    # before the subcommand.
+    p_validate.add_argument("--debug", action="store_true", default=argparse.SUPPRESS,
+                            help="Enable debug logging")
     p_validate.add_argument("path", help="Path to the skin addon directory")
     p_validate.add_argument("--report", action="store_true", help="Save text report to file")
     p_validate.add_argument("--json", action="store_true", help="Output JSON instead of terminal summary")

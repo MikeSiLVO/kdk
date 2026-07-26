@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Constants now resolve; bare names in whitelisted nodes and attributes were left untouched.
 - `validate --json` exits non-zero when errors are found.
+- `--debug` is accepted after the subcommand, not only before it.
 - Line-ending and BOM errors now count toward the summary and the exit code.
 - A check that crashes reports an error instead of passing silently.
 - Script and service add-ons no longer always resolve to Omega.
@@ -22,7 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Kodi reference snapshots are committed rather than fetched at build time, so a source checkout validates correctly.
-- Engine progress now prints during `validate`; it was silent regardless of `--debug`.
+- `validate` prints its summary to stdout, so redirecting to a file captures it. Progress stays on stderr.
+- `validate` reports the Kodi release and reference data it loaded; step-by-step engine detail is behind `--debug`.
 
 ## [1.1.0] - 2026-07-22
 
