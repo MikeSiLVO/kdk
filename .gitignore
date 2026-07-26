@@ -23,3 +23,7 @@ Thumbs.db
 *_report.txt
 *_report.html
 .kdk.json
+
+# Fetched at build time by scripts/update_kodi_refs.py so a release always
+# ships current upstream data.
+/src/kdk/data/kodi/

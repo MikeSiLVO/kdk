@@ -14,54 +14,8 @@ permissions:
   contents: write
 
 jobs:
-  refresh-kodi-refs:
-    name: refresh Kodi reference snapshots
-    runs-on: ubuntu-latest
-    outputs:
-      sha: ${{ steps.commit.outputs.sha }}
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          # Need full history + write token to push the snapshot commit back.
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-
-      - name: Install kdk (script imports `kdk.libs.addon` for the releases list)
-        run: pip install -e .
-
-      - name: Refresh snapshots
-        run: python scripts/update_kodi_refs.py
-
-      - name: Commit changes (if any)
-        id: commit
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet src/kdk/data/kodi/; then
-            echo "No upstream changes; using existing snapshots."
-            echo "sha=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          git add src/kdk/data/kodi/
-          git commit -m "[skip ci] update Kodi reference snapshots"
-          # Only push the snapshot bump back to the default branch when the
-          # build actually traces to it - guards against `workflow_dispatch`
-          # from a feature branch silently overwriting `main`.
-          DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
-          if git merge-base --is-ancestor "${GITHUB_SHA}" "origin/${DEFAULT_BRANCH}"; then
-            git push origin "HEAD:${DEFAULT_BRANCH}"
-          else
-            echo "Build ref ${GITHUB_SHA} is not on ${DEFAULT_BRANCH}; skipping snapshot push."
-          fi
-          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
   build:
     name: build (${{ matrix.os_label }}-${{ matrix.arch_label }})
-    needs: refresh-kodi-refs
     runs-on: ${{ matrix.os }}
     env:
       VERSION: ${{ github.event.inputs.tag || github.ref_name }}
@@ -84,8 +38,6 @@ jobs:
             artifact_ext: ""
     steps:
       - uses: actions/checkout@v5
-        with:
-          ref: ${{ needs.refresh-kodi-refs.outputs.sha }}
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -100,6 +52,11 @@ jobs:
 
       - name: Install build deps
         run: pip install -e ".[build]"
+
+      # Must fail the release rather than ship a binary with no Kodi-core
+      # colors or strings.
+      - name: Fetch Kodi reference snapshots
+        run: python scripts/update_kodi_refs.py
 
       - name: Build PyInstaller binary
         run: python make_binaries.py
@@ -159,16 +116,16 @@ jobs:
 
   build-wheel:
     name: build wheel + sdist
-    needs: refresh-kodi-refs
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-        with:
-          ref: ${{ needs.refresh-kodi-refs.outputs.sha }}
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - run: pip install build
+      # -e . pulls lxml, which the fetch script's import chain needs.
+      - run: pip install -e . build
+      # package-data globs data/kodi, so it must exist before the wheel is built.
+      - run: python scripts/update_kodi_refs.py
       - run: python -m build
       - uses: actions/upload-artifact@v5
         with:
@@ -177,12 +134,10 @@ jobs:
 
   release:
     name: publish GitHub Release
-    needs: [refresh-kodi-refs, build, build-wheel]
+    needs: [build, build-wheel]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-        with:
-          ref: ${{ needs.refresh-kodi-refs.outputs.sha }}
 
       - uses: actions/download-artifact@v5
         with:

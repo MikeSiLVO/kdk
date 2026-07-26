@@ -1,8 +1,8 @@
 """Refresh bundled Kodi reference snapshots from upstream xbmc/xbmc.
 
 For each release listed in `Addon.RELEASES`, fetch the latest `colors.xml` and
-`strings.po` matching its `github_ref` and write them to
-`src/kdk/data/kodi/<release>/`. Compares SHA256 first; only writes on change.
+`strings.po` matching its `github_ref` and write them to the package's
+`data/kodi/<release>/`. Compares SHA256 first; only writes on change.
 
 Run locally before tagging a release, or invoked by `release.yml` on tag push.
 Requires no extra Python deps - uses `urllib`.
@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import fnmatch
 import hashlib
+import importlib
 import json
 import sys
 from pathlib import Path
@@ -20,7 +21,12 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DATA_ROOT = REPO_ROOT / "src" / "kdk" / "data" / "kodi"
+
+# The engine lives at <root>/libs in KodiDevKit and <root>/src/kdk/libs in kdk;
+# this script is shared verbatim, so find the layout rather than assume one.
+_LAYOUTS = [(REPO_ROOT, REPO_ROOT / "data"), (REPO_ROOT / "src" / "kdk", REPO_ROOT / "src" / "kdk" / "data")]
+PACKAGE_ROOT, DATA_DIR = next(((pkg, data) for pkg, data in _LAYOUTS if (pkg / "libs").is_dir()), _LAYOUTS[0])
+DATA_ROOT = DATA_DIR / "kodi"
 
 GITHUB_API = "https://api.github.com/repos/xbmc/xbmc"
 GITHUB_RAW = "https://raw.githubusercontent.com/xbmc/xbmc"
@@ -69,9 +75,9 @@ def _resolve_ref(spec: str) -> str:
 
 def _load_releases() -> list[dict]:
     """Return `Addon.RELEASES` entries that declare a `github_ref`."""
-    sys.path.insert(0, str(REPO_ROOT / "src"))
-    from kdk.libs.addon.addon import Addon
-    return [r for r in Addon.RELEASES if r.get("github_ref")]
+    sys.path.insert(0, str(PACKAGE_ROOT.parent))
+    addon = importlib.import_module(f"{PACKAGE_ROOT.name}.libs.addon.addon")
+    return [r for r in addon.Addon.RELEASES if r.get("github_ref")]
 
 
 def _refresh_one(release: dict) -> list[str]:
@@ -90,8 +96,8 @@ def _refresh_one(release: dict) -> list[str]:
         try:
             content = _gh(url)
         except (HTTPError, URLError) as e:
-            print(f"  ! {remote_path}: {e}", file=sys.stderr)
-            continue
+            # Continuing here would ship a release with no Kodi-core data.
+            raise RuntimeError(f"{remote_path}: {e}") from e
 
         new_hash = hashlib.sha256(content).hexdigest()
         local_path = target_dir / local_name
