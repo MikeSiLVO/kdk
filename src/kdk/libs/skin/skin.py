@@ -483,21 +483,23 @@ class Skin(addon.Addon):
             }
 
         if folder in self.constant_map and lookup_name in self.constant_map[folder]:
+            source = self.constant_source_map.get(folder, {}).get(lookup_name, (None, 0))
             return {
                 "name": lookup_name,
                 "type": "constant",
                 "content": self.constant_map[folder][lookup_name],
-                "file": None,
-                "line": 0
+                "file": source[0],
+                "line": source[1]
             }
 
         if folder in self.expression_map and lookup_name in self.expression_map[folder]:
+            source = self.expression_source_map.get(folder, {}).get(lookup_name, (None, 0))
             return {
                 "name": lookup_name,
                 "type": "expression",
                 "content": self.expression_map[folder][lookup_name],
-                "file": None,
-                "line": 0
+                "file": source[0],
+                "line": source[1]
             }
 
         return None

@@ -58,6 +58,8 @@ class SkinResources:
                     })
                 logger.info("loaded Kodi-core colors from %s (%d entries)",
                             system_colors_path, len(colors) - before)
+        else:
+            logger.info("Kodi-core colors unavailable (resolved path: %s)", system_colors_path)
 
         if not colors:
             logger.info("No color file found in skin or system paths")

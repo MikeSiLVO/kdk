@@ -145,17 +145,15 @@ class Addon(object):
         return os.path.join(self.path, "resources", "skins", "Default", "media")
 
     @staticmethod
-    def by_project(project_path, settings):
-        """
-        factory, return proper instance based on addon.xml
-        """
-        xml_file = os.path.join(project_path, "addon.xml")
+    def by_project(path, settings):
+        """factory, return proper instance based on addon.xml"""
+        xml_file = os.path.join(path, "addon.xml")
         root = utils.get_root_from_file(xml_file)
         if root is None or root.find(".//import[@addon='xbmc.python']") is None:
             from .. import skin
-            return skin.Skin(path=project_path, settings=settings)
+            return skin.Skin(path=path, settings=settings)
         else:
-            return Addon(path=project_path, settings=settings)
+            return Addon(path=path, settings=settings)
 
     def update_labels(self):
         """
