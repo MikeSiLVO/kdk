@@ -100,10 +100,11 @@ class SkinResolution:
 
     def resolve_constants(self, node, folder: str):
         """
-        Resolve constants. Matches CGUIIncludes::ResolveConstants (GUIIncludes.cpp:391-410).
+        Resolve constants. Matches CGUIIncludes::ResolveConstants (GUIIncludes.cpp:320-342).
 
-        CRITICAL: Only expands in whitelisted attributes and nodes!
-        This is what Kodi does - constants are NOT expanded everywhere.
+        Whitelisted only: a node gets text-resolution iff its tag is in
+        SkinInclude.constant_nodes, else its attributes get value-resolution
+        for any name in SkinInclude.constant_attribs. Never both for one node.
         """
         if node is None:
             return
@@ -112,34 +113,28 @@ class SkinResolution:
         if not constants_for_folder:
             return
 
-
         if node.text and node.tag in SkinInclude.constant_nodes:
             node.text = self._resolve_constant_value(node.text, constants_for_folder)
-
-        for attr_name, attr_value in list(node.attrib.items()):
-            if attr_name in SkinInclude.constant_attribs:
-                node.attrib[attr_name] = self._resolve_constant_value(attr_value, constants_for_folder)
+        else:
+            for attr_name, attr_value in list(node.attrib.items()):
+                if attr_name in SkinInclude.constant_attribs:
+                    node.attrib[attr_name] = self._resolve_constant_value(attr_value, constants_for_folder)
 
     def _resolve_constant_value(self, value: str, constant_map: dict) -> str:
         """
-        Resolve constant references in a value. Matches CGUIIncludes::ResolveConstant.
+        Resolve bare constant names via comma-split lookup.
+        Matches CGUIIncludes::ResolveConstant (GUIIncludes.cpp:641-651).
 
-        Parses $CONSTANT[name] syntax and replaces with constant value.
-        Only resolves constants using explicit $CONSTANT[] syntax (Kodi spec).
+        Splits `value` by ',' then exact-matches each piece against
+        `constant_map` (no $ prefix, no whitespace trim, case-sensitive).
+        Matches are substituted verbatim, non-matches pass through. Pieces
+        are rejoined with ','. Substituted values are NOT re-scanned.
         """
         if not value:
             return value
-
-        pattern = re.compile(r'\$CONSTANT\[\s*([A-Za-z0-9_\-]+)\s*\]', re.IGNORECASE)
-
-        def replacer(match):
-            const_name = match.group(1)
-            if const_name in constant_map:
-                return constant_map[const_name]
-            return match.group(0)  # Return unchanged if not found
-
-        result = pattern.sub(replacer, value)
-        return result
+        pieces = value.split(",")
+        pieces = [constant_map.get(p, p) for p in pieces]
+        return ",".join(pieces)
 
     def resolve_expressions(self, node, folder: str):
         """
@@ -163,32 +158,8 @@ class SkinResolution:
                 node.attrib[attr_name] = self._resolve_expression_value(attr_value, expressions_for_folder, [])
 
     def _resolve_expression_value(self, value: str, expression_map: dict, resolved: list) -> str:
-        """
-        Resolve $EXP[name] references with circular detection.
-        Matches CGUIIncludes::FlattenExpression (GUIIncludes.cpp:223-242).
-        """
-        if not value:
-            return value
-
-        pattern = re.compile(r'\$EXP\[\s*([A-Za-z0-9_\-]+)\s*\]', re.IGNORECASE)
-
-        def replacer(match):
-            exp_name = match.group(1)
-
-            # Check for circular expression (GUIIncludes.cpp:227-231)
-            if exp_name in resolved:
-                logger.error("Skin has a circular expression \"%s\": %s", resolved[-1] if resolved else exp_name, value)
-                return ""
-
-            if exp_name not in expression_map:
-                return match.group(0)
-
-            # Recursively flatten nested expressions
-            resolved_copy = resolved + [exp_name]
-            exp_value = expression_map[exp_name]
-            return self._resolve_expression_value(exp_value, expression_map, resolved_copy)
-
-        return pattern.sub(replacer, value)
+        """Resolve $EXP[name] references with circular detection."""
+        return utils.flatten_expressions(value, expression_map, resolved)[0]
 
     # Separator for the include-expansion path stamped on spliced <include> nodes.
     # Tab is XML-attribute-safe and never appears in include names.
