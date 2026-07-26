@@ -28,6 +28,7 @@ from .infobool import (
 from .files import (
     eol_info_from_path_patterns,
     save_xml,
+    get_platform,
     get_absolute_file_paths,
     make_archive,
     check_bom,
@@ -99,6 +100,7 @@ __all__ = [
     # files
     "eol_info_from_path_patterns",
     "save_xml",
+    "get_platform",
     "get_absolute_file_paths",
     "make_archive",
     "check_bom",
