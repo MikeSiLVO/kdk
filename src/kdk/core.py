@@ -11,6 +11,7 @@ from typing import Callable
 from .config import load_config, Settings
 from .libs.infoprovider import InfoProvider
 from .libs.reporting.text import generate_text_report
+from .libs.validation.constants import SEVERITY_ERROR
 
 logger = logging.getLogger("kdk.core")
 
@@ -114,7 +115,12 @@ def validate_skin(
                 all_issues[name] = method(progress_callback=step_progress) or []
             except Exception as e:
                 logger.error("Check %s failed: %s", name, e, exc_info=True)
-                all_issues[name] = [{"message": f"Check failed: {e}", "file": "", "line": 0}]
+                # Severity matters: without it the row is filtered out of every
+                # output mode and the run exits 0 despite the check never running.
+                all_issues[name] = [{
+                    "message": f"Check failed: {e}",
+                    "file": "", "line": 0, "severity": SEVERITY_ERROR,
+                }]
         else:
             logger.warning("Check method %s not found", method_name)
 
