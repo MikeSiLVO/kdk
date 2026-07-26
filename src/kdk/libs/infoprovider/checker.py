@@ -30,6 +30,26 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# The Kodi-core snapshot is large and read-only, and the editor re-enters
+# get_po_files on every hover. Keyed by mtime so a refreshed snapshot reloads.
+_CORE_PO_CACHE: dict = {}
+
+
+def _core_po(path):
+    """Parsed Kodi-core strings.po for `path`, reusing the last parse."""
+    try:
+        stamp = os.path.getmtime(path)
+    except OSError:
+        stamp = None
+    cached = _CORE_PO_CACHE.get(path)
+    if cached and cached[0] == stamp:
+        return cached[1]
+    po = utils.get_po_file(path)
+    if po is not None:
+        po.language = "resource.language.en_gb"  # type: ignore[attr-defined]
+        _CORE_PO_CACHE[path] = (stamp, po)
+    return po
+
 
 class CheckerMixin:
     """All validation: dispatching, per-file checks, reporting."""
@@ -63,7 +83,7 @@ class CheckerMixin:
         core_po_path = kodi_strings_po(self.addon, kodi_path or None)
         if core_po_path:
             try:
-                _add(utils.get_po_file(core_po_path))
+                _add(_core_po(core_po_path))
             except Exception as e:
                 logger.warning("Failed to load Kodi-core strings.po (%s): %s", core_po_path, e)
 
@@ -374,7 +394,6 @@ class CheckerMixin:
         if not var_name:
             return True  # Not a variable expression
 
-        # PERFORMANCE FIX: Use pre-built cache (O(1) lookup instead of O(m) iteration)
         # The cache is built once per file in check_file() for fast lookups
         var_def = getattr(self, '_variable_cache', {}).get(var_name)
 
