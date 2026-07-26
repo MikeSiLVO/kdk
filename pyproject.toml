@@ -73,3 +73,9 @@ typeCheckingMode = "basic"
 [tool.ruff]
 target-version = "py310"
 line-length = 120
+# Vendored upstream, kept byte-identical so it can be re-vendored.
+exclude = ["src/kdk/libs/polib"]
+
+[tool.ruff.lint.per-file-ignores]
+# sys.path setup has to precede the imports.
+"tests/*.py" = ["E402"]
