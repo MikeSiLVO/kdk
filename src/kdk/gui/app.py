@@ -199,7 +199,7 @@ class KdkApp(QMainWindow):
     def closeEvent(self, event: QCloseEvent):
         from kdk.config import save_user_config
         try:
-            blob = base64.b64encode(bytes(self.saveGeometry())).decode("ascii")
+            blob = base64.b64encode(self.saveGeometry().data()).decode("ascii")
             save_user_config("window_geometry", blob)
         except Exception:
             pass
@@ -446,7 +446,8 @@ def _bundled_icon() -> QIcon | None:
     return None
 
 def run_gui():
-    app = QApplication.instance() or QApplication(sys.argv)
+    existing = QApplication.instance()
+    app = existing if isinstance(existing, QApplication) else QApplication(sys.argv)
     app.setStyle(QStyleFactory.create("Fusion"))
     icon = _bundled_icon()
     if icon is not None:

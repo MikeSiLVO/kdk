@@ -42,8 +42,8 @@ def _render_png(svg_bytes: bytes, size: int) -> bytes:
     from PySide6.QtCore import QBuffer
     qbuf = QBuffer(buf)
     qbuf.open(QBuffer.OpenModeFlag.WriteOnly)
-    img.save(qbuf, "PNG")
-    return bytes(buf)
+    img.save(qbuf, b"PNG")
+    return bytes(buf.data())
 
 
 def main() -> int:
