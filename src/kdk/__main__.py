@@ -10,11 +10,24 @@ import sys
 
 
 def setup_logging(debug: bool = False):
-    level = logging.DEBUG if debug else logging.WARNING
     logging.basicConfig(
-        level=level,
+        level=logging.DEBUG if debug else logging.WARNING,
         format="%(levelname)s: %(message)s",
     )
+    # The engine reports progress at INFO; surface it without unmuting third parties.
+    logging.getLogger("kdk").setLevel(logging.DEBUG if debug else logging.INFO)
+
+
+def real_issues(issues):
+    """Drop placeholder rows: no source location, no error severity, not a missing file."""
+    from kdk.libs.validation.constants import SEVERITY_ERROR
+
+    return [
+        i for i in issues
+        if i.get("line", 0) > 0
+        or i.get("severity") == SEVERITY_ERROR
+        or "not found" in i.get("message", "").lower()
+    ]
 
 
 def cmd_validate(args):
@@ -60,13 +73,15 @@ def cmd_validate(args):
             "duration_seconds": round(result["duration"], 2),
             "categories": {},
         }
+        errors = 0
         for category, issues in result["issues"].items():
-            real_issues = [i for i in issues if i.get("line", 0) > 0 or "not found" in i.get("message", "").lower()]
-            if real_issues:
-                output["categories"][category] = real_issues
+            rows = real_issues(issues)
+            if rows:
+                output["categories"][category] = rows
+                errors += sum(1 for i in rows if i.get("severity") == SEVERITY_ERROR)
         json.dump(output, sys.stdout, indent=2)
         print()
-        return 0
+        return 1 if errors > 0 else 0
 
     print(file=sys.stderr)
     print(f"  Skin: {result['skin_name']}", file=sys.stderr)
@@ -77,13 +92,13 @@ def cmd_validate(args):
     total_warnings = 0
 
     for category, issues in result["issues"].items():
-        real_issues = [i for i in issues if i.get("line", 0) > 0 or "not found" in i.get("message", "").lower()]
-        if not real_issues:
+        rows = real_issues(issues)
+        if not rows:
             continue
 
-        errors = sum(1 for i in real_issues if i.get("severity") == SEVERITY_ERROR)
-        warnings = sum(1 for i in real_issues if i.get("severity") == SEVERITY_WARNING)
-        other = len(real_issues) - errors - warnings
+        errors = sum(1 for i in rows if i.get("severity") == SEVERITY_ERROR)
+        warnings = sum(1 for i in rows if i.get("severity") == SEVERITY_WARNING)
+        other = len(rows) - errors - warnings
         total_errors += errors
         total_warnings += warnings
 
