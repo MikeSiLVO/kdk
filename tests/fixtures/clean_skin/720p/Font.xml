@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <fonts>
 	<fontset id="Default" idloc="31390" unicode="true">
+		<font>
+			<name>font13</name>
+			<filename>NotoSans-Regular.ttf</filename>
+			<size>28</size>
+		</font>
 	</fontset>
 </fonts>

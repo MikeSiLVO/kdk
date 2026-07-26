@@ -35,7 +35,14 @@ jobs:
           sudo apt-get install -y libegl1 libxkbcommon0 libdbus-1-3 libxcb-cursor0
 
       - name: Install kdk
-        run: pip install -e .
+        run: pip install -e ".[dev]"
+
+      # Gitignored, so without this the bundled-reference tests skip silently.
+      - name: Fetch Kodi reference snapshots
+        run: python scripts/update_kodi_refs.py
+
+      - name: Run test suite
+        run: pytest tests/ -q
 
       - name: Verify entry points
         run: |
@@ -47,3 +54,12 @@ jobs:
 
       - name: Run validator on fixture (clean - expects exit 0)
         run: kdk validate tests/fixtures/clean_skin
+
+      # The README advertises this exit code for CI use.
+      - name: Run validator on fixture (dirty - expects exit 1)
+        shell: bash
+        run: |
+          for mode in "" "--json"; do
+            kdk validate tests/fixtures/dirty_skin $mode > /dev/null && {
+              echo "expected non-zero exit for dirty fixture (mode='${mode:-text}')"; exit 1; }
+          done

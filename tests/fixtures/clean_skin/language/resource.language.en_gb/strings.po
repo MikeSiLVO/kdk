@@ -10,3 +10,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Language: en_GB\n"
+
+msgctxt "#31000"
+msgid "KDK fixture"
+msgstr ""

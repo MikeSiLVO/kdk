@@ -3,13 +3,13 @@
 	<defaultcontrol always="true">9000</defaultcontrol>
 	<controls>
 		<control type="group" id="9000">
+			<include>NoSuchInclude</include>
 			<control type="label">
-				<description>Hello</description>
 				<posx>50</posx>
 				<posy>50</posy>
 				<width>200</width>
 				<height>40</height>
-				<label>KDK fixture</label>
+				<label>$VAR[NoSuchVariable]</label>
 			</control>
 		</control>
 	</controls>
