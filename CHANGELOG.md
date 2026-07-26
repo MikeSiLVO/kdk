@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Constants now resolve; bare names in whitelisted nodes and attributes were left untouched.
+- `validate --json` exits non-zero when errors are found.
+- Line-ending and BOM errors now count toward the summary and the exit code.
+- A check that crashes reports an error instead of passing silently.
+- Script and service add-ons no longer always resolve to Omega.
+
+### Added
+
+- `kodi_release` setting to override the detected Kodi release.
+
+### Changed
+
+- Kodi reference snapshots are committed rather than fetched at build time, so a source checkout validates correctly.
+- Engine progress now prints during `validate`; it was silent regardless of `--debug`.
+
 ## [1.1.0] - 2026-07-22
 
 ### Added
