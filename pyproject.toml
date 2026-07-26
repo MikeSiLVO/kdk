@@ -66,9 +66,14 @@ version = { attr = "kdk.__version__" }
 
 [tool.pyright]
 pythonVersion = "3.10"
-venvPath = "."
-venv = ".venv"
 typeCheckingMode = "basic"
+# `src/kdk` so the shared tests resolve `libs.*` the way conftest.py aliases it
+# at runtime; `tests` for the sublime mock they import.
+extraPaths = ["src", "src/kdk", "tests"]
+exclude = ["src/kdk/libs/polib", "build", "dist", "typings"]
+# Hand-written stubs modelling how this codebase actually uses lxml, and the
+# guarded sublime import in the shared engine.
+stubPath = "typings"
 
 [tool.ruff]
 target-version = "py310"
