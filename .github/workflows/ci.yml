@@ -37,10 +37,6 @@ jobs:
       - name: Install kdk
         run: pip install -e ".[dev]"
 
-      # Gitignored, so without this the bundled-reference tests skip silently.
-      - name: Fetch Kodi reference snapshots
-        run: python scripts/update_kodi_refs.py
-
       - name: Run test suite
         run: pytest tests/ -q
 

@@ -53,11 +53,6 @@ jobs:
       - name: Install build deps
         run: pip install -e ".[build]"
 
-      # Must fail the release rather than ship a binary with no Kodi-core
-      # colors or strings.
-      - name: Fetch Kodi reference snapshots
-        run: python scripts/update_kodi_refs.py
-
       - name: Build PyInstaller binary
         run: python make_binaries.py
 
@@ -122,10 +117,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      # -e . pulls lxml, which the fetch script's import chain needs.
-      - run: pip install -e . build
-      # package-data globs data/kodi, so it must exist before the wheel is built.
-      - run: python scripts/update_kodi_refs.py
+      - run: pip install build
       - run: python -m build
       - uses: actions/upload-artifact@v5
         with:

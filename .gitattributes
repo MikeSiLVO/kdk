@@ -1,0 +1,8 @@
+# KodiDevKit's sync_engine.py byte-compares these against its own copies, so a
+# checkout on a machine with core.autocrlf=true must not read as wholesale drift.
+src/kdk/data/**/*.xml text eol=lf
+src/kdk/data/**/*.po text eol=lf
+src/kdk/data/**/*.json text eol=lf
+scripts/update_kodi_refs.py text eol=lf
+
+src/kdk/data/icon.ico binary
