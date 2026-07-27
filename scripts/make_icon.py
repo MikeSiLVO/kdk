@@ -29,7 +29,7 @@ def _render_png(svg_bytes: bytes, size: int) -> bytes:
     from PySide6.QtWidgets import QApplication
 
     # QImage needs a QApplication (or at least a QGuiApplication) live.
-    QApplication.instance() or QApplication(sys.argv)
+    _ = QApplication.instance() or QApplication(sys.argv)
 
     renderer = QSvgRenderer(QByteArray(svg_bytes))
     img = QImage(size, size, QImage.Format.Format_ARGB32)
@@ -52,7 +52,7 @@ def main() -> int:
         return 1
 
     try:
-        from PIL import Image
+        from PIL import Image  # pyright: ignore[reportMissingImports]
     except ImportError:
         print(
             'Pillow not installed. Run: pip install -e ".[build]"',
