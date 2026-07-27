@@ -45,8 +45,10 @@ build = [
 ]
 dev = [
     "pytest>=8.0",
-    "pyright>=1.1.350",
-    "ruff>=0.4",
+    # Pinned so a tool release cannot change what CI enforces without a commit
+    # saying so. CI installs this extra, so local matches by installing it too.
+    "pyright==1.1.411",
+    "ruff==0.16.0",
 ]
 
 [project.scripts]
@@ -80,6 +82,11 @@ target-version = "py310"
 line-length = 120
 # Vendored upstream, kept byte-identical so it can be re-vendored.
 exclude = ["src/kdk/libs/polib"]
+
+[tool.ruff.lint]
+# Stated rather than inherited: ruff 0.16 widened its default set, which changed
+# what CI enforced without anything here changing.
+select = ["E4", "E7", "E9", "F"]
 
 [tool.ruff.lint.per-file-ignores]
 # sys.path setup has to precede the imports.
