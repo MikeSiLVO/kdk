@@ -137,7 +137,10 @@ jobs:
         with:
           name: wheel-sdist
           path: dist/
+      # A PyPI version can only be uploaded once, so a re-run must not fail here
       - uses: pypa/gh-action-pypi-publish@v1.14.2
+        with:
+          skip-existing: true
 
   release:
     name: publish GitHub Release

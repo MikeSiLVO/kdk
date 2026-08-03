@@ -5,4 +5,10 @@ src/kdk/data/**/*.po text eol=lf
 src/kdk/data/**/*.json text eol=lf
 scripts/update_kodi_refs.py text eol=lf
 
+# The clean_skin fixture has to stay clean on a Windows checkout, or the release
+# smoke test flags its own line endings.
+tests/fixtures/**/*.xml text eol=lf
+tests/fixtures/**/*.po text eol=lf
+tests/fixtures/**/*.ttf binary
+
 src/kdk/data/icon.ico binary
