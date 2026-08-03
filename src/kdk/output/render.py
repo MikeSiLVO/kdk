@@ -90,13 +90,15 @@ def render_summary(result, issues):
 
 
 def _relative(path, root):
-    """Path relative to the skin root, falling back to the original on any mismatch."""
+    """Path relative to `root`, falling back to the original when it isn't under it."""
     if not path:
         return ""
     try:
-        return os.path.relpath(path, root).replace(os.sep, "/")
+        rel = os.path.relpath(path, root).replace(os.sep, "/")
     except ValueError:
         return path
+    # A path outside root relativises to a run of `..`, which helps nobody
+    return path if rel.startswith("../") else rel
 
 
 def render_issues(issues, skin_path, *, show_category=True):

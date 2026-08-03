@@ -30,6 +30,15 @@ def test_path_is_relative_to_the_workspace(capsys, monkeypatch):
     assert "file=skin/16x9/Home.xml," in annotations(capsys)[0]
 
 
+def test_path_outside_the_workspace_stays_absolute(capsys, monkeypatch):
+    """Relativising it would emit a run of `..` that points at nothing useful."""
+    monkeypatch.setenv("GITHUB_WORKSPACE", "/repo")
+
+    render_github({"Images": [issue("error", "boom", path="/elsewhere/skin/16x9/Home.xml")]})
+
+    assert "file=/elsewhere/skin/16x9/Home.xml," in annotations(capsys)[0]
+
+
 def test_percent_and_newline_escaped_in_message(capsys, monkeypatch):
     """A raw newline would end the command early and swallow the rest of the message."""
     monkeypatch.setenv("GITHUB_WORKSPACE", "/repo")
