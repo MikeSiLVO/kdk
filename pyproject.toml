@@ -48,7 +48,7 @@ dev = [
     # Pinned so a tool release cannot change what CI enforces without a commit
     # saying so. CI installs this extra, so local matches by installing it too.
     "pyright==1.1.411",
-    "ruff==0.16.0",
+    "ruff==0.16.1",
 ]
 
 [project.scripts]
