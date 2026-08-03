@@ -1,45 +1,53 @@
-"""CLI entry point; `kdk validate` is the only subcommand (run `kdk --help` for details)."""
+"""CLI entry point; run `kdk --help` for the available subcommands."""
 
 from __future__ import annotations
 
 import argparse
 import json
-import logging
 import os
 import sys
 
-# These narrate the same steps the progress callback already prints, so at INFO
-# they double every line. Their detail is still there under --debug.
-ECHOES_PROGRESS = ("kdk.libs.skin.index",)
-
-
-def setup_logging(debug: bool = False):
-    logging.basicConfig(
-        level=logging.DEBUG if debug else logging.WARNING,
-        format="%(levelname)s: %(message)s",
-    )
-    # The engine reports progress at INFO; surface it without unmuting third parties.
-    logging.getLogger("kdk").setLevel(logging.DEBUG if debug else logging.INFO)
-    if not debug:
-        for name in ECHOES_PROGRESS:
-            logging.getLogger(name).setLevel(logging.WARNING)
-
 
 def real_issues(issues):
-    """Drop placeholder rows: no source location, no error severity, not a missing file."""
-    from kdk.libs.validation.constants import SEVERITY_ERROR
+    """Drop the sentinel rows checks return when clean: no severity and no source line."""
+    return [i for i in issues if i.get("severity") or (i.get("line") or 0) > 0]
 
-    return [
-        i for i in issues
-        if i.get("line", 0) > 0
-        or i.get("severity") == SEVERITY_ERROR
-        or "not found" in i.get("message", "").lower()
-    ]
+
+def visible_issues(raw, args):
+    """Apply the include filter, sentinel filter, and any --severity/--category narrowing."""
+    from kdk.core import filter_include_warnings
+
+    issues = raw if args.show_include_warnings else filter_include_warnings(raw)
+
+    wanted = (args.category or "").lower()
+    result = {}
+    for category, rows in issues.items():
+        if wanted and wanted not in category.lower():
+            continue
+        rows = real_issues(rows)
+        if args.severity:
+            rows = [i for i in rows if i.get("severity") == args.severity]
+        if rows:
+            result[category] = rows
+    return result
+
+
+def exit_code(issues, strict):
+    """1 on errors, or on anything at all under --strict."""
+    from kdk.output import counts
+
+    errors, warnings = counts(issues)
+    if errors:
+        return 1
+    return 1 if strict and warnings else 0
 
 
 def cmd_validate(args):
-    from kdk.core import validate_skin, save_report, filter_include_warnings
-    from kdk.libs.validation.constants import SEVERITY_ERROR, SEVERITY_WARNING
+    from kdk.core import CHECK_SEQUENCE, save_report, validate_skin
+    from kdk.output import (
+        RunProgress, browse, console, render_github, render_issues, render_json,
+        render_summary, save_run,
+    )
 
     skin_path = os.path.abspath(args.path)
     if not os.path.isdir(skin_path):
@@ -52,83 +60,97 @@ def cmd_validate(args):
     if args.kodi_path:
         overrides["kodi_path"] = args.kodi_path
 
-    def progress(step, total, message):
-        if not args.json:
-            print(f"  [{step}/{total}] {message}", file=sys.stderr)
-
-    if not args.json:
-        print(f"Validating: {skin_path}", file=sys.stderr)
-        print(file=sys.stderr)
-
-    result = validate_skin(skin_path, config_overrides=overrides, progress_callback=progress)
-
-    if not args.show_include_warnings:
-        result["issues"] = filter_include_warnings(result["issues"])
+    with RunProgress(skin_path, len(CHECK_SEQUENCE), enabled=not args.json and not args.quiet) as bar:
+        result = validate_skin(skin_path, config_overrides=overrides, progress_callback=bar.update)
 
     if result["error"]:
         if args.json:
             json.dump({"error": result["error"]}, sys.stdout, indent=2)
+            print()
         else:
-            print(f"\nError: {result['error']}", file=sys.stderr)
+            print(f"Error: {result['error']}", file=sys.stderr)
         return 1
 
+    save_run(skin_path, result, result["issues"])
+    issues = visible_issues(result["issues"], args)
+
     if args.json:
-        output = {
-            "skin_name": result["skin_name"],
-            "skin_path": result["skin_path"],
-            "timestamp": result["timestamp"],
-            "duration_seconds": round(result["duration"], 2),
-            "categories": {},
-        }
-        errors = 0
-        for category, issues in result["issues"].items():
-            rows = real_issues(issues)
-            if rows:
-                output["categories"][category] = rows
-                errors += sum(1 for i in rows if i.get("severity") == SEVERITY_ERROR)
-        json.dump(output, sys.stdout, indent=2)
-        print()
-        return 1 if errors > 0 else 0
+        payload = render_json(result, issues)
+        text = json.dumps(payload, indent=2)
+        if args.output:
+            with open(args.output, "w", encoding="utf-8") as f:
+                f.write(text + "\n")
+            print(f"Written: {args.output}", file=sys.stderr)
+        else:
+            print(text)
+        return exit_code(issues, args.strict)
 
-    # The summary is the result, so it goes to stdout and survives a redirect;
-    # progress above stays on stderr so it still shows on the terminal.
-    print()
-    print(f"  Skin: {result['skin_name']}")
-    print(f"  Time: {result['duration']:.1f}s")
-    print()
+    if args.github:
+        render_github(issues)
 
-    total_errors = 0
-    total_warnings = 0
-
-    for category, issues in result["issues"].items():
-        rows = real_issues(issues)
-        if not rows:
-            continue
-
-        errors = sum(1 for i in rows if i.get("severity") == SEVERITY_ERROR)
-        warnings = sum(1 for i in rows if i.get("severity") == SEVERITY_WARNING)
-        other = len(rows) - errors - warnings
-        total_errors += errors
-        total_warnings += warnings
-
-        parts = []
-        if errors:
-            parts.append(f"{errors} error{'s' if errors != 1 else ''}")
-        if warnings:
-            parts.append(f"{warnings} warning{'s' if warnings != 1 else ''}")
-        if other:
-            parts.append(f"{other} issue{'s' if other != 1 else ''}")
-
-        print(f"  {category:20s} {', '.join(parts)}")
-
-    print()
-    print(f"  Total: {total_errors} errors, {total_warnings} warnings")
+    render_summary(result, issues)
 
     if args.report or args.output:
         report_path = save_report(result, args.output)
-        print(f"\n  Report saved: {report_path}")
+        console.print(f"  [dim]Report saved: {report_path}[/]")
+        console.print()
 
-    return 1 if total_errors > 0 else 0
+    if issues and not args.quiet:
+        interactive = console.is_terminal and not args.list and sys.stdin.isatty()
+        if interactive:
+            browse(issues, skin_path)
+        else:
+            render_issues(issues, skin_path)
+
+    return exit_code(issues, args.strict)
+
+
+def cmd_issues(args):
+    from kdk.output import browse, console, load_run, render_github, render_issues, render_json, render_summary
+
+    skin_path = os.path.abspath(args.path)
+    run = load_run(skin_path)
+    if not run:
+        print(f"No cached run for {skin_path} - run 'kdk validate' first", file=sys.stderr)
+        return 1
+
+    issues = visible_issues(run["issues"], args)
+
+    if args.json:
+        print(json.dumps(render_json(run, issues), indent=2))
+        return exit_code(issues, args.strict)
+
+    if args.github:
+        render_github(issues)
+
+    console.print()
+    console.print(f"  [bold]{run['skin_name']}[/]  [dim]validated {run['timestamp']}[/]")
+    console.print()
+
+    if args.browse and console.is_terminal and sys.stdin.isatty():
+        browse(issues, skin_path)
+    else:
+        render_issues(issues, skin_path)
+
+    if args.summary:
+        render_summary(run, issues)
+
+    return exit_code(issues, args.strict)
+
+
+def add_filters(parser):
+    """Flags shared by `validate` and `issues` so both narrow results the same way."""
+    from kdk.libs.validation.constants import SEVERITY_ERROR, SEVERITY_WARNING
+
+    parser.add_argument("--severity", choices=[SEVERITY_ERROR, SEVERITY_WARNING],
+                        help="Only show issues of this severity")
+    parser.add_argument("--category", help="Only show categories matching this text (e.g. fonts)")
+    parser.add_argument("--show-include-warnings", action="store_true",
+                        help="Include warnings that come from include content (hidden by default)")
+    parser.add_argument("--strict", action="store_true", help="Exit non-zero on warnings too, not just errors")
+    parser.add_argument("--json", action="store_true", help="Output JSON instead of the terminal view")
+    parser.add_argument("--github", action="store_true",
+                        help="Emit GitHub Actions annotations so CI shows each issue inline")
 
 
 def main():
@@ -145,18 +167,29 @@ def main():
     # before the subcommand.
     p_validate.add_argument("--debug", action="store_true", default=argparse.SUPPRESS,
                             help="Enable debug logging")
-    p_validate.add_argument("path", help="Path to the skin addon directory")
-    p_validate.add_argument("--report", action="store_true", help="Save text report to file")
-    p_validate.add_argument("--json", action="store_true", help="Output JSON instead of terminal summary")
-    p_validate.add_argument("--output", "-o", help="Output path for report file")
-    p_validate.add_argument("--show-include-warnings", action="store_true",
-                            help="Show warnings from include content (hidden by default)")
+    p_validate.add_argument("path", nargs="?", default=".", help="Path to the skin addon directory")
+    p_validate.add_argument("--quiet", "-q", action="store_true", help="Summary only, no issue list")
+    p_validate.add_argument("--list", action="store_true", help="Print every issue instead of the picker")
+    p_validate.add_argument("--report", action="store_true", help="Also save the full text report")
+    p_validate.add_argument("--output", "-o", help="Write output to this path")
     p_validate.add_argument("--language", help="Language code (e.g. resource.language.en_gb)")
     p_validate.add_argument("--kodi-path", help="Path to Kodi installation")
+    add_filters(p_validate)
     p_validate.set_defaults(func=cmd_validate)
 
+    p_issues = subparsers.add_parser("issues", help="Show issues from the last validate run")
+    p_issues.add_argument("--debug", action="store_true", default=argparse.SUPPRESS,
+                          help="Enable debug logging")
+    p_issues.add_argument("path", nargs="?", default=".", help="Path to the skin addon directory")
+    p_issues.add_argument("--browse", action="store_true", help="Pick a category instead of printing everything")
+    p_issues.add_argument("--summary", action="store_true", help="Append the per-category summary")
+    add_filters(p_issues)
+    p_issues.set_defaults(func=cmd_issues)
+
     args = parser.parse_args()
-    setup_logging(args.debug)
+
+    from kdk.output import quiet_engine_logging
+    quiet_engine_logging(args.debug)
 
     if not args.command:
         parser.print_help(sys.stderr)

@@ -37,10 +37,10 @@ jobs:
             arch_label: arm64
             artifact_ext: ""
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -94,7 +94,7 @@ jobs:
           esac
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: kdk-${{ matrix.os_label }}-${{ matrix.arch_label }}
           # Bare path matches only on Windows (raw .exe); archive paths match
@@ -113,25 +113,40 @@ jobs:
     name: build wheel + sdist
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - run: pip install build
       - run: python -m build
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: wheel-sdist
           path: dist/*
+
+  publish:
+    name: publish to PyPI
+    needs: build-wheel
+    runs-on: ubuntu-latest
+    environment: pypi
+    # Trusted publishing: PyPI verifies this workflow's OIDC claim, so no token
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: wheel-sdist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@v1.14.2
 
   release:
     name: publish GitHub Release
     needs: [build, build-wheel]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
 
@@ -161,7 +176,7 @@ jobs:
           cat release_body.md
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           draft: ${{ github.event_name == 'workflow_dispatch' }}

@@ -36,9 +36,16 @@ cd kdk
 pip install -e .
 ```
 
-Requires Python 3.10+. The GUI uses PySide6, installed automatically via pip. On
-Linux you may need a few X/wayland system packages (`libxkbcommon`, `libgl1`)
-which most desktop installs already have.
+Requires Python 3.10+. The CLI needs only `lxml` and `rich`.
+
+The GUI is an extra, so a plain install leaves it out:
+
+```bash
+pip install -e ".[gui]"
+```
+
+On Linux the GUI may need a few X/wayland system packages (`libxkbcommon`,
+`libgl1`) which most desktop installs already have.
 
 ### Building a local binary
 
@@ -61,15 +68,87 @@ Same args as CI, so a local build that works should match the released artifact.
 ## Usage
 
 ```bash
-kdk-gui                                   # Launch the GUI
-kdk validate /path/to/skin                # Terminal summary + exit code
-kdk validate /path/to/skin --report       # Also save text report to ~/Downloads
-kdk validate /path/to/skin --json         # Machine-readable JSON
-kdk validate /path/to/skin --output X     # Custom report path
-kdk validate /path/to/skin --show-include-warnings   # Don't filter include-originated warnings
+kdk-gui                        # Launch the GUI
+kdk validate                   # Validate the current directory
+kdk validate /path/to/skin     # Summary, then pick a category to read
+kdk validate --list            # Print every issue instead of the picker
+kdk validate --quiet           # Summary only
 ```
 
-Exit code is `1` if any errors are found, `0` otherwise. Useful for CI on a skin repo.
+On a terminal `validate` ends with a category picker. Redirected or piped it
+prints every issue instead, so CI logs are complete.
+
+Results are cached per skin, so you can read a finished run without paying for
+another one:
+
+```bash
+kdk issues                     # Every issue from the last run
+kdk issues --browse            # Pick a category
+kdk issues --category fonts    # One category
+kdk issues --severity error    # Errors only
+```
+
+Both commands take `--json` for machine-readable output, `--output` to write to
+a file, and `--show-include-warnings` to stop filtering warnings that originate
+inside include content.
+
+Exit code is `1` if any errors are found, `0` otherwise. Add `--strict` to fail
+on warnings too, which is usually what you want in CI:
+
+```bash
+kdk validate --strict .
+```
+
+## GitHub Actions
+
+`--github` additionally prints each issue as a workflow command, so it shows up
+as an inline annotation on the commit and on the pull request diff instead of
+being buried in the log:
+
+```yaml
+      - run: pip install kdk
+      - run: kdk validate --strict --github .
+```
+
+Annotation paths are relative to `GITHUB_WORKSPACE`, so a skin in a subdirectory
+still points at the right file.
+
+Run it on `ubuntu-latest`. A case-sensitive filesystem is the point: a reference
+whose case doesn't match the file on disk works on Windows and macOS and fails on
+Linux and Android, so a Windows-only check cannot find that class of bug.
+
+## Silencing a finding
+
+An XML comment mutes findings the skin has already judged, the way a
+`# type: ignore` does in Python. Put it at the top of a file to cover the whole
+file, or on a line to cover just that line:
+
+```xml
+<!-- kdk-ignore-file: labels -->        whole file, Labels only
+<!-- kdk-ignore-file -->                whole file, every check
+<!-- kdk-ignore: labels, images -->     one line, Labels and Images
+<!-- kdk-ignore -->                     one line, every check
+```
+
+Both placements work. A directive sharing its line with markup applies to that
+markup; one sitting on its own line applies to the line below it:
+
+```xml
+<label>SiLVO</label> <!-- kdk-ignore: labels -->
+
+<!-- kdk-ignore: labels -->
+<label>Superman</label>
+```
+
+Category names are the ones in the summary (`Labels`, `Fonts`, `Images`, `IDs`,
+`Variables`, `Includes`, `XML Validation`, `File Integrity`), matched without
+regard to case, spaces, or hyphens.
+
+Useful for a debug overlay whose labels are deliberately untranslated:
+
+```xml
+<!-- kdk-ignore-file: labels -->
+```
 
 ## Configuration
 
