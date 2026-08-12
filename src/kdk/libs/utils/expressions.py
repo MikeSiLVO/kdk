@@ -22,6 +22,8 @@ _DEFAULT_DYNAMIC_PREFIXES = tuple(
         "$addon[",
         "$escvar[",
         "$escinfo[",
+        "$map[",
+        "$escmap[",
     )
 )
 

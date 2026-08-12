@@ -17,6 +17,7 @@ logger = logging.getLogger("kdk.core")
 
 CHECK_SEQUENCE = [
     ("Variables", "check_variables"),
+    ("Maps", "check_maps"),
     ("Includes", "check_includes"),
     ("Labels", "check_labels"),
     ("Fonts", "check_fonts"),
