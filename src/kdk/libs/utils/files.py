@@ -1,4 +1,4 @@
-"""File-system helpers: EOL detection, XML save, archive build, BOM check, addon-list fetch."""
+"""File operation utilities for KodiDevKit."""
 
 from __future__ import annotations
 
@@ -27,7 +27,8 @@ def eol_info_from_path_patterns(
     includes: list[str] | None = None,
     excludes: list[str] | None = None
 ) -> list[tuple[str, str | None]]:
-    """Return `[(filepath, eol)]` for every file under `paths`; `eol` is `'\r\n'`, `'\n'`, `'\r'`, or `None`. `excludes` match anywhere in the path, `includes` match its end."""
+    """Line ending of each matching file, or None where it has no newline."""
+    # excludes match anywhere in the path, includes match its end.
 
     includes = includes or []
     excludes = excludes or []
@@ -77,7 +78,10 @@ def eol_info_from_path_patterns(
 
 
 def save_xml(filename: str, root, tab_width: int = 4) -> None:
-    """Pretty-print `root` to `filename`, replacing each `tab_width` leading spaces with a tab."""
+    """
+    Save XML node `root` to file `filename`.
+    Uses lxml pretty_print, then converts leading spaces to tabs.
+    """
 
     xml_bytes = ET.tostring(root, encoding="UTF-8", xml_declaration=True, pretty_print=True)
     text = xml_bytes.decode("utf-8")
@@ -109,6 +113,16 @@ def get_platform() -> str:
         return {"Darwin": "osx", "Linux": "linux"}.get(_plat.system(), "windows")
 
 
+def get_sublime_path() -> str | None:
+    """Get command-line path to execute Sublime Text externally."""
+    plat = get_platform()
+    if plat in ("osx", "linux"):
+        return "subl"
+    elif os.path.exists(os.path.join(os.getcwd(), "sublime_text.exe")):
+        return os.path.join(os.getcwd(), "sublime_text.exe")
+    return None
+
+
 def get_absolute_file_paths(directory: str):
     """Generate absolute file paths for all files in directory (recursive)."""
     for dirpath, _, filenames in os.walk(directory):
@@ -117,7 +131,7 @@ def get_absolute_file_paths(directory: str):
 
 
 def make_archive(folderpath: str, archive: str) -> None:
-    """Zip `folderpath` into `archive`, skipping `.git`, hidden files, `media/` (except `.xbt`), `themes/`, and bytecode."""
+    """Create zip archive from folder, excluding dev files and hidden files/folders."""
     file_list = get_absolute_file_paths(folderpath)
     with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as zip_file:
         for addon_file in file_list:
@@ -154,7 +168,10 @@ def check_paths(paths: list[str]) -> Optional[str]:
 
 
 def get_addons(reponame: str, *, timeout: int = 15, max_retries: int = 3) -> dict[str, str]:
-    """Fetch `{addon_id: version}` from `mirrors.kodi.tv/addons/<reponame>/addons.xml`; retries with backoff."""
+    """
+    Return {addon_id: version} from the Kodi mirror for a given repo name.
+    Retries with simple backoff; logs a traceback on final failure.
+    """
     repo_url = f"https://mirrors.kodi.tv/addons/{reponame}/addons.xml"
     logger.info("Downloading %s addon list", reponame)
 

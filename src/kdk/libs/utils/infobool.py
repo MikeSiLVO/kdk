@@ -1,18 +1,31 @@
-"""Boolean-condition syntax checking, mirroring Kodi's InfoExpression parser.
+"""Boolean-condition checking, mirroring Kodi's InfoExpression parser.
 
-Kodi evaluates a condition it cannot parse as a constant `false`
-(InfoExpression.cpp:34-42), so the skin never sees the error. `check_condition`
-catches it statically and says why.
+Kodi returns `false` from `XBMC.GetInfoBooleans` for a condition it cannot parse,
+same as for a genuinely false one (InfoExpression.cpp:34-42). `check_syntax`
+catches that offline; the negation probe catches it over the wire.
 """
 
 from __future__ import annotations
 
 import re
 
+STATE_TRUE = "true"
+STATE_FALSE = "false"
 STATE_INVALID = "invalid"
 STATE_NEEDS_CONTEXT = "needs_context"
+STATE_OFFLINE = "offline"
 
 _OPERATORS = "[]!+|"
+
+# Answered through the JSON-RPC permission layer, not by evaluating the condition
+# (XBMCOperations.cpp:60-69), so the direct value and the negation can disagree.
+_PERMISSION_GATED = frozenset({
+    "system.canshutdown",
+    "system.canpowerdown",
+    "system.cansuspend",
+    "system.canhibernate",
+    "system.canreboot",
+})
 
 # Substituted just before parsing by CGUIInfoLabel::ReplaceLocalize
 # (GUIInfoManager.cpp:11441), so their brackets never reach the parser.
@@ -135,3 +148,38 @@ def check_condition(condition: str) -> tuple[str, str] | None:
     if reason:
         return STATE_INVALID, reason
     return None
+
+
+def negation_of(condition: str) -> str:
+    """The bracketed negation Kodi evaluates alongside `condition`."""
+    return f"![{condition}]"
+
+
+def probe_booleans(condition: str) -> list[str]:
+    """The pair to send as `XBMC.GetInfoBooleans` params for `condition`."""
+    return [condition, negation_of(condition)]
+
+
+def read_probe(result, condition: str) -> str:
+    """Turn a probe response into one of the STATE_* verdicts."""
+    # Both halves false means Kodi swapped a failed parse for a constant false
+    # (InfoExpression.cpp:34-42), the only way to see a parse error over JSON-RPC.
+    values = (result or {}).get("result")
+    if not isinstance(values, dict):
+        return STATE_OFFLINE
+
+    direct = values.get(condition)
+    if direct is None:
+        return STATE_OFFLINE
+
+    # The permission-gated five can disagree between the direct key and the
+    # negation, so trust the direct value.
+    if condition.strip().lower() in _PERMISSION_GATED:
+        return STATE_TRUE if direct else STATE_FALSE
+
+    negated = values.get(negation_of(condition))
+    if negated is None:
+        return STATE_OFFLINE
+    if direct:
+        return STATE_TRUE
+    return STATE_FALSE if negated else STATE_INVALID

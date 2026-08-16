@@ -1,4 +1,4 @@
-"""Detect dynamic expressions (`$VAR`/`$INFO`/`$LOCALIZE`/`$PARAM`) and resolve `$PARAM` substitutions."""
+"""Dynamic expression detection and parameter resolution for Kodi skinning."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ def is_number(text: str) -> bool:
 
 
 def extract_number_value(text: str) -> str | None:
-    """Return the inner number from `$NUMBER[N]` (or `None` if `text` isn't a valid `$NUMBER[...]`)."""
+    """Numeric value inside `$NUMBER[...]`, or None when `text` is not one."""
     if not isinstance(text, str):
         return None
 
@@ -55,7 +55,7 @@ def extract_number_value(text: str) -> str | None:
 
 
 def extract_variable_name(text: str) -> str | None:
-    """Return the variable name from `$VAR[Name,...]` / `$ESCVAR[Name,...]` (`None` if not a variable expression)."""
+    """Variable name inside `$VAR[...]` or `$ESCVAR[...]`, or None when `text` is neither."""
     if not isinstance(text, str):
         return None
 
@@ -72,7 +72,8 @@ def extract_variable_name(text: str) -> str | None:
 
 
 def resolve_params_in_text(text: str, params: Optional[dict[str, str]] = None) -> tuple[str, str]:
-    """Substitute `$PARAM[k]` with `params[k]` (XML-escaped); missing keys stay literal. Returns `(text, status)` where `status` is `NO_PARAMS`/`ALL_RESOLVED`/`PARTIAL_RESOLVED`/`SINGLE_UNDEFINED`."""
+    """Substitute `$PARAM[name]` from `params`, with a status naming how much resolved; unknown names stay put."""
+    # Values are XML-escaped so entities like & < > survive the re-parse.
     if not text or not isinstance(text, str):
         return text, "NO_PARAMS"
     if not params:
@@ -111,7 +112,10 @@ def resolve_params_in_text(text: str, params: Optional[dict[str, str]] = None) -
 
 
 def is_dynamic_expression(text: str, *, prefixes: Optional[tuple[str, ...]] = None) -> bool:
-    """`True` if `text` (after trimming) starts with one of `prefixes` (default: `$PARAM[`/`$VAR[`/`$INFO[`/`$ADDON[`/`$ESCVAR[`/`$ESCINFO[`); case-insensitive."""
+    """
+    Return True when `text` starts with a Kodi runtime expression such as
+    $PARAM[], $VAR[], $INFO[], etc. Case-insensitive. Leading whitespace ignored.
+    """
     if not isinstance(text, str):
         return False
     candidate = text.strip()
@@ -131,7 +135,7 @@ def starts_with_param_reference(text: str) -> bool:
 
 
 def contains_dynamic_expression(text: str) -> bool:
-    """`True` if a dynamic expression appears anywhere in `text` (vs `is_dynamic_expression` which only checks the start)."""
+    """True when a runtime expression appears anywhere in `text`, unlike `is_dynamic_expression` which needs it first."""
     if not isinstance(text, str):
         return False
     if not text:
@@ -139,6 +143,29 @@ def contains_dynamic_expression(text: str) -> bool:
 
     lowered = text.casefold()
     return any(pref in lowered for pref in _DEFAULT_DYNAMIC_PREFIXES)
+
+
+def split_top_level_commas(text: str) -> list[str]:
+    """Split `text` on commas outside any `(...)` or `[...]`, dropping empty pieces."""
+    # Kodi nests commas inside calls and macros, so a plain str.split(',') corrupts them.
+    parts: list[str] = []
+    buf: list[str] = []
+    depth = 0
+    for ch in text:
+        if ch in "([":
+            depth += 1
+            buf.append(ch)
+        elif ch in ")]":
+            if depth > 0:
+                depth -= 1
+            buf.append(ch)
+        elif ch == "," and depth == 0:
+            parts.append("".join(buf).strip())
+            buf = []
+        else:
+            buf.append(ch)
+    parts.append("".join(buf).strip())
+    return [p for p in parts if p]
 
 
 _EXP_PATTERN = re.compile(r"\$EXP\[\s*([A-Za-z0-9_\-]+)\s*\]", re.IGNORECASE)
@@ -175,8 +202,101 @@ def flatten_expressions(text: str, expression_map: dict[str, str],
     return _EXP_PATTERN.sub(replacer, text), unknown
 
 
+_KEYWORD_MACRO_RE = re.compile(
+    r"\$(?:LOCALIZE|NUMBER|INFO|ESCINFO|VAR|ESCVAR|MAP|ESCMAP|EXP|ADDON|PARAM)\[",
+    re.IGNORECASE,
+)
+
+
+def _kodi_macro_mask(text: str) -> set:
+    """Indices that lie inside a `$KEYWORD[...]` macro."""
+    # ReplaceLocalize runs before booleans parse (GUIInfoManager.cpp:11441), so these
+    # brackets never reach the operator logic; masking $INFO/$VAR too keeps hovers whole.
+    masked: set = set()
+    pos = 0
+    while pos < len(text):
+        m = _KEYWORD_MACRO_RE.search(text, pos)
+        if not m:
+            break
+        bracket_open = m.end() - 1
+        depth = 1
+        j = bracket_open + 1
+        while j < len(text) and depth > 0:
+            if text[j] == '[':
+                depth += 1
+            elif text[j] == ']':
+                depth -= 1
+            j += 1
+        end = j if depth == 0 else len(text)
+        masked.update(range(m.start(), end))
+        pos = end
+    return masked
+
+
+def extract_expression_at_offset(line_text: str, cursor_offset: int) -> str:
+    """Smallest Kodi boolean sub-expression enclosing `cursor_offset`."""
+    # Operators are exactly [ ] ! + | (InfoExpression.cpp:125-139); parens count as depth
+    # so a click inside Function(args) returns the whole call. A leading ! must stay
+    # attached, or the boolean sent to Kodi carries the opposite truth value.
+    if not line_text:
+        return ""
+    n = len(line_text)
+    cursor_offset = max(0, min(cursor_offset, n))
+
+    xml_delims = '"<>\n\r'
+    enc_left = cursor_offset
+    while enc_left > 0 and line_text[enc_left - 1] not in xml_delims:
+        enc_left -= 1
+    enc_right = cursor_offset
+    while enc_right < n and line_text[enc_right] not in xml_delims:
+        enc_right += 1
+
+    enc = line_text[enc_left:enc_right]
+    cur = cursor_offset - enc_left
+    masked = _kodi_macro_mask(enc)
+
+    depths = []
+    d = 0
+    for i, ch in enumerate(enc):
+        depths.append(d)
+        if i in masked:
+            continue
+        if ch == '(':
+            d += 1
+        elif ch == ')' and d > 0:
+            d -= 1
+
+    boundary = set('+|[]')
+
+    def active(i: int) -> bool:
+        return i not in masked and depths[i] == 0
+
+    sub_left = 0
+    leftmost_bang = None
+    for i in range(cur - 1, -1, -1):
+        if not active(i):
+            continue
+        ch = enc[i]
+        if ch in boundary:
+            sub_left = leftmost_bang if leftmost_bang is not None else i + 1
+            break
+        if ch == '!':
+            leftmost_bang = i
+    else:
+        if leftmost_bang is not None:
+            sub_left = leftmost_bang
+
+    sub_right = len(enc)
+    for i in range(cur, len(enc)):
+        if active(i) and enc[i] in boundary:
+            sub_right = i
+            break
+
+    return enc[sub_left:sub_right].strip()
+
+
 def get_param_names_in_context(include_node, xpath_pattern: str) -> set[str]:
-    """Return param names appearing in `$PARAM[...]` references within nodes matched by `xpath_pattern` under `include_node`."""
+    """Param names used where `xpath_pattern` matches, which is what tells a control id from a label."""
     if include_node is None:
         return set()
 

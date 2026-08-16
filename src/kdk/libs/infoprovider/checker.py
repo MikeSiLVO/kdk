@@ -1,4 +1,4 @@
-"""`CheckerMixin`: dispatches validation, runs per-file XML checks, applies the resolved-tree interpreter."""
+"""Validation and check orchestration mixin for InfoProvider."""
 
 from __future__ import annotations
 
@@ -142,7 +142,7 @@ class CheckerMixin:
         return [{"message": f"No {kind} issues found", "file": "", "line": 0}]
 
     def resolve_xml(self, path_or_root, *, folder=None, strict=False):
-        """Return a deep-copied root with includes/constants/expressions/defaults resolved; `folder` auto-detected from path or addon default."""
+        """Resolved copy of `path_or_root`; without `strict` a parse failure returns the tree unresolved."""
         from ..skin import Skin
 
         if hasattr(path_or_root, "tag"):
@@ -165,23 +165,17 @@ class CheckerMixin:
             f = next(iter(self.addon.xml_folders), None)
 
         if not f:
-            # No folder context -> nothing to expand
             return root
 
-        # 3) Get Skin instance (with 5-map structure for Kodi-aligned resolution)
         sk = getattr(self, "addon", None)
         if not sk or not isinstance(sk, Skin):
-            # Non-Skin addon or no addon - cannot resolve includes
             return root
 
         try:
             # Make deep copy to avoid modifying cached/original tree
             # (kodi_resolve modifies tree in-place per Kodi's CGUIIncludes::Resolve)
             resolved_root = copy.deepcopy(root)
-
-            # Apply Kodi-exact resolution: defaults -> constants -> expressions -> includes -> recurse
             sk.resolver.resolve(resolved_root, f)
-
             return resolved_root
         except Exception:
             if strict:
@@ -247,7 +241,7 @@ class CheckerMixin:
         return self.get_suppressions().filter(category, issues)
 
     def get_validation_index(self, progress_callback=None):
-        """Lazily build (and cache) the addon's validation index; returns `None` if the addon doesn't support one."""
+        """Return the cached validation index, building it on first access."""
         if not self.addon:
             return None
 
@@ -287,7 +281,7 @@ class CheckerMixin:
         return self._muted("Includes", checker.check(progress_callback=progress_callback))
 
     def check_fonts(self, progress_callback=None):
-        """Run font validation against the current skin."""
+        """Validate fonts declared by the current skin."""
         if not self.addon:
             return self._no_issues("font")
 
@@ -299,7 +293,7 @@ class CheckerMixin:
         return self._muted("Fonts", checker.check(progress_callback=progress_callback))
 
     def check_ids(self, progress_callback=None):
-        """Run control/window ID validation against the current skin."""
+        """Check undefined or invalid control/window IDs."""
         if not self.addon:
             return self._no_issues("id")
 
@@ -311,7 +305,7 @@ class CheckerMixin:
         return self._muted("IDs", checker.check(progress_callback=progress_callback))
 
     def check_labels(self, progress_callback=None):
-        """Run label validation against the current skin."""
+        """Find untranslated/undefined labels."""
         if not self.addon:
             return self._no_issues("label")
 
@@ -338,7 +332,10 @@ class CheckerMixin:
 
 
     def check_values(self, progress_callback=None):
-        """Run `check_file` over every XML file (validates the unexpanded source - what the author wrote)."""
+        """
+        Apply check_file to all XML files in the addon.
+        Validates what the skin author actually wrote (unexpanded source).
+        """
         if not self.addon:
             return []
 
@@ -419,7 +416,7 @@ class CheckerMixin:
         return True
 
     def _validate_variable_values(self, listitems, node, var_text, value_type, folder, tag_name=None):
-        """Walk every `<value>` of the variable referenced in `var_text` and check it against `value_type` (color/int/enum); appends issues to `listitems`."""
+        """Check every `<value>` in a `$VAR[...]` definition against `value_type`, appending failures to `listitems`."""
         var_name = utils.extract_variable_name(var_text)
         if not var_name:
             return True  # Not a variable expression
@@ -584,7 +581,7 @@ class CheckerMixin:
             )
 
         # When interpreter handles resolved tree, skip value checks here to avoid
-        # false positives from $PARAM/$VAR/$CONST in unresolved XML
+        # false positives from $PARAM/$VAR placeholders or bare constant names in unresolved XML
         skip_value_checks = self._can_resolve()
 
         seen_singletons = {}
@@ -657,8 +654,8 @@ class CheckerMixin:
                     else:
                         seen.add(tag_low)
 
-            # Attribute checks - structural (invalid name) always runs,
-            # value checks gated by skip_value_checks
+            # Attribute name checks always run; value checks defer to the
+            # resolved pass when `skip_value_checks` is set.
             for k, v in subnode.attrib.items():
                 if k == "description":
                     continue
@@ -699,7 +696,7 @@ class CheckerMixin:
         if self._can_resolve():
             resolved_issues = self._check_file_resolved(root, path, folder)
             if resolved_issues:
-                # Deduplicate by (line, message) - raw pass issues take priority
+                # Source-pass issues take priority on collision.
                 seen = {(item["line"], item["message"]) for item in listitems}
                 for item in resolved_issues:
                     key = (item["line"], item["message"])
