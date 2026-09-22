@@ -300,10 +300,16 @@ class KdkApp(QMainWindow):
         worker.failed.connect(self._on_failed)
         worker.finished.connect(thread.quit)
         worker.failed.connect(thread.quit)
+        thread.finished.connect(self._on_thread_done)
         thread.finished.connect(thread.deleteLater)
         self._worker = worker
         self._worker_thread = thread
         thread.start()
+
+    def _on_thread_done(self):
+        """Forget the finished thread so the next run does not touch a deleted QThread."""
+        self._worker_thread = None
+        self._worker = None
 
     def _on_progress(self, step: int, total: int, message: str):
         self.progress.setValue(int((step / total) * 100) if total else 0)
