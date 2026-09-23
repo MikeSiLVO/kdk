@@ -10,8 +10,8 @@ from typing import Any
 
 from lxml.etree import XMLSyntaxError
 
-from .. import utils
-from ..addon import Addon
+from ..utils.xml import get_root_from_file
+from ..addon.addon import Addon
 
 logger = logging.getLogger(__name__)
 
@@ -38,10 +38,10 @@ class LoaderMixin:
         """
         data_dir = os.path.join(os.path.dirname(__file__), "..", "..", "data", kodi_version)
 
-        self.template_root = utils.get_root_from_file(
+        self.template_root = get_root_from_file(
             os.path.join(data_dir, "controls.xml")
         )
-        root = utils.get_root_from_file(
+        root = get_root_from_file(
             os.path.join(data_dir, "data.xml")
         )
         with open(os.path.join(data_dir, "windows.json"), "r") as f:
@@ -117,7 +117,7 @@ class LoaderMixin:
 
         for xml_path in self.addon.get_xml_files():
             try:
-                root = utils.get_root_from_file(xml_path)
+                root = get_root_from_file(xml_path)
                 if root is None:
                     raise XMLSyntaxError("Unparseable file", xml_path, 0, 0)
             except XMLSyntaxError:

@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Callable
 
 from .config import load_config, Settings
-from .libs.infoprovider import InfoProvider
+from .libs.infoprovider.provider import InfoProvider
 from .libs.reporting.text import generate_text_report
 from .libs.validation.constants import SEVERITY_ERROR
 

@@ -2,7 +2,7 @@
 
 import os
 from datetime import datetime
-from .. import utils
+from ..utils.validation import is_runtime_generated_file
 from ..validation.constants import SEVERITY_ERROR, SEVERITY_WARNING
 
 
@@ -12,7 +12,7 @@ def generate_text_report(all_issues, skin_name, skin_path, output_path=None):
     filtered = {}
     total_runtime_excluded = 0
     for category, issues in all_issues.items():
-        normal = [i for i in issues if not utils.is_runtime_generated_file(i.get("file", ""))]
+        normal = [i for i in issues if not is_runtime_generated_file(i.get("file", ""))]
         total_runtime_excluded += len(issues) - len(normal)
         if normal:
             filtered[category] = normal
