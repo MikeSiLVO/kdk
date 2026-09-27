@@ -222,9 +222,9 @@ def get_root_from_file(xml_file):
 
 
 def check_brackets(label):
-    """True when every bracket in the text is closed by its own kind, in order."""
+    """True when every round and square bracket in the text is closed by its own kind, in order."""
     stack = []
-    push_chars, pop_chars = "<({[", ">)}]"
+    push_chars, pop_chars = "([", ")]"
     for c in label:
         if c in push_chars:
             stack.append(c)
@@ -237,6 +237,24 @@ def check_brackets(label):
                 if stack_top != balancing_bracket:
                     return False
     return not stack
+
+
+def param_value(param, value_attr):
+    """Value of one <param>, the attribute before the text (see GUIIncludes.cpp:583)."""
+    value = param.get(value_attr)
+    if value is None:
+        value = (param.text or "").strip()
+    return value
+
+
+def get_params(include, value_attr):
+    """Get an include's named <param> values, keeping the first of each name as Kodi does."""
+    params = {}
+    for param in include.findall("param"):
+        name = param.get("name")
+        if name and name not in params:
+            params[name] = param_value(param, value_attr)
+    return params
 
 
 def file_needs_expansion(path, max_bytes=FILE_PREVIEW_SIZE):
