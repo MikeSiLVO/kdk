@@ -13,6 +13,7 @@ class InfoProvider(LoaderMixin, CheckerMixin):
         self.WINDOW_FILENAMES: list = []
         self.WINDOW_NAMES: list = []
         self.WINDOW_IDS: list = []
+        self.MODELESS_IDS: set = set()
         self.builtins: list = []
         self.conditions: list = []
         self.template_attribs: dict = {}
