@@ -25,6 +25,7 @@ class LoaderMixin:
     WINDOW_NAMES: list
     WINDOW_IDS: list
     MODELESS_IDS: set
+    OBSOLETE_WINDOW_FILES: dict
     builtins: list
     conditions: list
     template_attribs: dict
@@ -47,6 +48,8 @@ class LoaderMixin:
         )
         with open(os.path.join(data_dir, "windows.json"), "r") as f:
             WINDOW_MAP = json.load(f)
+        with open(os.path.join(data_dir, "obsolete_windows.json"), encoding="utf-8") as f:
+            self.OBSOLETE_WINDOW_FILES = json.load(f)
 
         if root is None:
             raise ValueError(f"Failed to load data.xml for Kodi version {kodi_version}")
