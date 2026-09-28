@@ -25,6 +25,7 @@ CHECK_SEQUENCE = [
     ("Images", "check_images"),
     ("XML Validation", "check_values"),
     ("File Integrity", "check_file_integrity"),
+    ("Kodi Repo", "check_repo"),
 ]
 
 
