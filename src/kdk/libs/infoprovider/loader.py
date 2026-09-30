@@ -10,6 +10,7 @@ from typing import Any
 
 from lxml.etree import XMLSyntaxError
 
+from ..utils.infobool import info_name_sets
 from ..utils.xml import get_root_from_file
 from ..addon.addon import Addon
 
@@ -27,6 +28,7 @@ class LoaderMixin:
     MODELESS_IDS: set
     DIALOG_IDS: set
     OBSOLETE_WINDOW_FILES: dict
+    INFO_NAMES: dict
     builtins: list
     conditions: list
     template_attribs: dict
@@ -51,6 +53,8 @@ class LoaderMixin:
             WINDOW_MAP = json.load(f)
         with open(os.path.join(data_dir, "obsolete_windows.json"), encoding="utf-8") as f:
             self.OBSOLETE_WINDOW_FILES = json.load(f)
+        with open(os.path.join(data_dir, "infonames.json"), encoding="utf-8") as f:
+            self.INFO_NAMES = info_name_sets(json.load(f))
 
         if root is None:
             raise ValueError(f"Failed to load data.xml for Kodi version {kodi_version}")
