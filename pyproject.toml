@@ -7,7 +7,7 @@ name = "kdk"
 dynamic = ["version"]
 description = "Kodi skin validation tool - CLI and GUI"
 readme = "README.md"
-license = "GPL-2.0-only"
+license = "GPL-3.0-or-later"
 license-files = ["LICENSE"]
 requires-python = ">=3.10"
 authors = [

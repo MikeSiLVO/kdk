@@ -404,7 +404,7 @@ class KdkApp(QMainWindow):
                 "Standalone Kodi skin validator.<br>"
                 "CLI + PySide6 GUI.<br><br>"
                 "<a href='https://github.com/MikeSiLVO/kdk'>github.com/MikeSiLVO/kdk</a><br><br>"
-                "GPL-2.0-only"
+                "GPL-3.0-or-later"
             ),
         )
 

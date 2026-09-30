@@ -175,4 +175,16 @@ Example config file:
 
 ## License
 
-GPL-2.0-only. See [LICENSE](LICENSE).
+GPL-3.0-or-later. See [LICENSE](LICENSE).
+
+Based on the original [KodiDevKit](https://github.com/phil65/KodiDevKit) by Philipp Temminghoff (phil65), Copyright (C) 2015-2019, licensed GPL-3.0-or-later.
+
+### Bundled Kodi data
+
+`src/kdk/data/` carries reference data taken from [Kodi](https://github.com/xbmc/xbmc), Copyright (C) Team Kodi, licensed GPL-2.0-or-later and used here under GPL-3.0-or-later:
+
+- `src/kdk/data/kodi/<release>/` - `colors.xml` and `strings.po`, copied verbatim by `scripts/refresh.py`.
+- `src/kdk/data/<release>/data.xml` - builtin and boolean-condition names with their descriptions, taken from the Kodi sources and maintained by hand.
+- `src/kdk/data/<release>/infonames.json` - the infolabel and boolean-condition names Kodi's parser accepts, taken from the Kodi sources.
+- `src/kdk/data/<release>/windows.json` and `obsolete_windows.json` - window names, ids and files, taken from the Kodi sources.
+- `src/kdk/data/addon_schema/` - addon.xml schemas copied verbatim from [kodi-addon-checker](https://github.com/xbmc/addon-check), Copyright (C) Team Kodi, licensed GPL-3.0-only.
