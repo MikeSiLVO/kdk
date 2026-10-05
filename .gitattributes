@@ -1,3 +1,5 @@
+* text=auto eol=lf
+
 # KodiDevKit's sync.py byte-compares these against its own copies, so a
 # checkout on a machine with core.autocrlf=true must not read as wholesale drift.
 src/kdk/data/**/*.xml text eol=lf
