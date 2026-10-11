@@ -1,111 +1,111 @@
-"""Plain-text validation report writer."""
+"""Plain-text validation report for the export endpoint, free of `sublime`."""
 
-import os
-from datetime import datetime
-from ..utils.validation import is_runtime_generated_file
+from typing import Container
+
 from ..validation.constants import SEVERITY_ERROR, SEVERITY_WARNING
 
 
-def generate_text_report(all_issues, skin_name, skin_path, output_path=None):
-    """Build a plain-text report from `all_issues`; writes to `output_path` if given. Returns `(text, output_path)`."""
+def issue_visible(issue, hidden_severities, hide_include_warnings):
+    """True when the issue passes the HTML report's severity and include-warning filters."""
+    severity = issue.get("severity", SEVERITY_WARNING)
+    if severity in hidden_severities:
+        return False
+    if hide_include_warnings and issue.get("include_name") and severity != SEVERITY_ERROR:
+        return False
+    return True
 
-    filtered = {}
-    total_runtime_excluded = 0
-    for category, issues in all_issues.items():
-        normal = [i for i in issues if not is_runtime_generated_file(i.get("file", ""))]
-        total_runtime_excluded += len(issues) - len(normal)
-        if normal:
-            filtered[category] = normal
 
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    total_errors = 0
-    total_warnings = 0
-    for issues in filtered.values():
-        for issue in issues:
-            sev = issue.get("severity", "warning")
-            if sev == SEVERITY_ERROR:
-                total_errors += 1
-            elif sev == SEVERITY_WARNING:
-                total_warnings += 1
-
+def generate_text_report(report_data, *, hidden_severities: Container[str] = frozenset(), hide_include_warnings=False):
+    """Generate the text report, honoring the same filters as the HTML report."""
     lines = []
     lines.append("=" * 80)
     lines.append("KODI SKIN VALIDATION REPORT")
     lines.append("=" * 80)
     lines.append("")
-    lines.append(f"Skin:      {skin_name}")
-    lines.append(f"Path:      {skin_path}")
-    lines.append(f"Generated: {timestamp}")
-    lines.append(f"Total:     {total_errors} errors, {total_warnings} warnings")
+    lines.append(f"Skin: {report_data.get('skin_name', 'Unknown')}")
+    lines.append(f"Path: {report_data.get('skin_path', 'Unknown')}")
+    lines.append(f"Generated: {report_data.get('timestamp', 'Unknown')}")
+    lines.append("")
+    lines.append("=" * 80)
+    lines.append("SUMMARY")
+    lines.append("=" * 80)
+    lines.append("")
 
-    if total_runtime_excluded > 0:
-        lines.append(f"Excluded:  {total_runtime_excluded} runtime-generated issues")
+    all_issues_raw = report_data.get('all_issues', {})
+
+    all_issues = {}
+    total_filtered_out = 0
+
+    for category, issues in all_issues_raw.items():
+        kept = []
+        for issue in issues:
+            if not issue_visible(issue, hidden_severities, hide_include_warnings):
+                total_filtered_out += 1
+                continue
+            kept.append(issue)
+        if kept:
+            all_issues[category] = kept
+
+    total_issues = sum(len(issues) for issues in all_issues.values())
+    lines.append(f"Total Issues: {total_issues}")
+    lines.append(f"Categories: {len([c for c, issues in all_issues.items() if issues])}")
+
+    filter_notes = _describe_filters(hidden_severities, hide_include_warnings)
+    if filter_notes:
+        lines.append("")
+        lines.append(f"Filters: {filter_notes} ({total_filtered_out} issue{'s' if total_filtered_out != 1 else ''} hidden)")
 
     lines.append("")
 
-    # Summary table
     lines.append("-" * 80)
-    lines.append(f"{'Category':<25s} {'Errors':>8s} {'Warnings':>10s}")
-    lines.append("-" * 80)
-
-    for category, issues in filtered.items():
-        errors = sum(1 for i in issues if i.get("severity") == SEVERITY_ERROR)
-        warnings = sum(1 for i in issues if i.get("severity") == SEVERITY_WARNING)
-        if errors or warnings:
-            lines.append(f"{category:<25s} {errors:>8d} {warnings:>10d}")
-
+    lines.append("ISSUES BY CATEGORY")
     lines.append("-" * 80)
     lines.append("")
 
-    # Detailed issues by category
-    for category, issues in filtered.items():
+    for category, issues in all_issues.items():
         if not issues:
             continue
 
         lines.append("")
-        lines.append(f"{'=' * 60}")
-        lines.append(f" {category.upper()} ({len(issues)} issues)")
-        lines.append(f"{'=' * 60}")
+        lines.append(f"{'#' * 60}")
+        lines.append(f"# {category.upper()} ({len(issues)} issues)")
+        lines.append(f"{'#' * 60}")
         lines.append("")
 
-        # Group by file
         by_file = {}
         for issue in issues:
-            file_path = issue.get("file", "")
-            if file_path not in by_file:
-                by_file[file_path] = []
-            by_file[file_path].append(issue)
+            file_path = issue.get('file', 'Unknown')
+            by_file.setdefault(file_path, []).append(issue)
 
         for file_path in sorted(by_file.keys()):
             file_issues = by_file[file_path]
-            rel_path = file_path
-            if skin_path and file_path.startswith(skin_path):
-                rel_path = os.path.relpath(file_path, skin_path)
+            lines.append(f"  File: {file_path}")
+            lines.append(f"  {'-' * 76}")
 
-            lines.append(f"  {rel_path}")
+            for issue in file_issues:
+                line_num = issue.get('line', 0)
+                message = issue.get('message', 'No message')
+                issue_type = issue.get('type', '')
 
-            for issue in sorted(file_issues, key=lambda i: i.get("line", 0)):
-                line_num = issue.get("line", 0)
-                message = issue.get("message", "")
-                sev = issue.get("severity", "warning")
-                marker = "E" if sev == SEVERITY_ERROR else "W"
+                lines.append(f"    Line {line_num:4d}: {message}")
+                if issue_type:
+                    lines.append(f"                Type: {issue_type}")
+                lines.append("")
 
-                inc_name = issue.get("include_name", "")
-                inc_suffix = f"  (from include: {inc_name})" if inc_name else ""
-
-                lines.append(f"    {marker} L{line_num:<5d} {message}{inc_suffix}")
-
-            lines.append("")
-
+    lines.append("")
     lines.append("=" * 80)
     lines.append("END OF REPORT")
     lines.append("=" * 80)
 
-    text = "\n".join(lines)
+    return '\n'.join(lines)
 
-    if output_path:
-        with open(output_path, "w", encoding="utf-8") as f:
-            f.write(text)
 
-    return text, output_path
+def _describe_filters(hidden_severities, hide_include_warnings):
+    """Describe the active filters, or return an empty string when none are active."""
+    parts = []
+    for sev in (SEVERITY_ERROR, SEVERITY_WARNING):
+        if sev in hidden_severities:
+            parts.append(f"{sev}s hidden")
+    if hide_include_warnings:
+        parts.append("include warnings hidden")
+    return ", ".join(parts)
