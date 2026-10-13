@@ -92,12 +92,15 @@ Both commands take `--json` for machine-readable output, `--output` to write to
 a file, and `--show-include-warnings` to stop filtering warnings that originate
 inside include content.
 
-Exit code is `1` if any errors are found, `0` otherwise. Add `--strict` to fail
-on warnings too, which is usually what you want in CI:
+Exit code is `1` if any errors are found, `2` when kdk could not finish the run,
+and `0` otherwise. Add `--strict` to fail on warnings too:
 
 ```bash
 kdk validate --strict .
 ```
+
+`--exit-zero` gives `0` for any finished run, so a non-zero code only ever means
+kdk failed.
 
 ## GitHub Actions
 

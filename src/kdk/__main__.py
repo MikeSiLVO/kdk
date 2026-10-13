@@ -6,6 +6,10 @@ import argparse
 import json
 import os
 import sys
+import traceback
+
+# kdk could not finish the run; argparse also uses 2 for a bad command line
+FAILED = 2
 
 
 def real_issues(issues):
@@ -32,14 +36,16 @@ def visible_issues(raw, args):
     return result
 
 
-def exit_code(issues, strict):
-    """1 on errors, or on warnings too when warnings count as failures."""
+def exit_code(issues, args):
+    """1 on errors, or warnings too when they count as failures; 0 for a finished run if asked."""
     from kdk.output.payload import counts
 
+    if args.exit_zero:
+        return 0
     errors, warnings = counts(issues)
     if errors:
         return 1
-    return 1 if strict and warnings else 0
+    return 1 if args.strict and warnings else 0
 
 
 def cmd_validate(args):
@@ -51,7 +57,7 @@ def cmd_validate(args):
     skin_path = os.path.abspath(args.path)
     if not os.path.isdir(skin_path):
         print(f"Error: {skin_path} is not a directory", file=sys.stderr)
-        return 1
+        return FAILED
 
     overrides = {}
     if args.language:
@@ -72,7 +78,7 @@ def cmd_validate(args):
             print()
         else:
             print(f"Error: {result['error']}", file=sys.stderr)
-        return 1
+        return FAILED
 
     save_run(skin_path, result, result["issues"])
     issues = visible_issues(result["issues"], args)
@@ -86,7 +92,7 @@ def cmd_validate(args):
             print(f"Written: {args.output}", file=sys.stderr)
         else:
             print(text)
-        return exit_code(issues, args.strict)
+        return exit_code(issues, args)
 
     from kdk.output.browse import browse
     from kdk.output.render import console, render_github, render_issues, render_summary
@@ -108,7 +114,7 @@ def cmd_validate(args):
         else:
             render_issues(issues, skin_path)
 
-    return exit_code(issues, args.strict)
+    return exit_code(issues, args)
 
 
 def cmd_issues(args):
@@ -120,13 +126,13 @@ def cmd_issues(args):
     run = load_run(skin_path)
     if not run:
         print(f"No cached run for {skin_path} - run 'kdk validate' first", file=sys.stderr)
-        return 1
+        return FAILED
 
     issues = visible_issues(run["issues"], args)
 
     if args.json:
         print(json.dumps(render_json(run, issues), indent=2))
-        return exit_code(issues, args.strict)
+        return exit_code(issues, args)
 
     from kdk.output.browse import browse
     from kdk.output.render import console, render_github, render_issues, render_summary
@@ -146,11 +152,11 @@ def cmd_issues(args):
     if args.summary:
         render_summary(run, issues)
 
-    return exit_code(issues, args.strict)
+    return exit_code(issues, args)
 
 
 def add_filters(parser):
-    """Flags shared by `validate` and `issues` so both narrow results the same way."""
+    """Add the flags shared by `validate` and `issues`."""
     from kdk.libs.validation.constants import SEVERITY_ERROR, SEVERITY_WARNING
 
     parser.add_argument("--severity", choices=[SEVERITY_ERROR, SEVERITY_WARNING],
@@ -159,13 +165,15 @@ def add_filters(parser):
     parser.add_argument("--show-include-warnings", action="store_true",
                         help="Include warnings that come from include content (hidden by default)")
     parser.add_argument("--strict", action="store_true", help="Exit non-zero on warnings too, not just errors")
+    parser.add_argument("--exit-zero", action="store_true",
+                        help="Exit 0 whenever the run finishes, issues or not; 2 still means kdk failed")
     parser.add_argument("--json", action="store_true", help="Output JSON instead of the terminal view")
     parser.add_argument("--github", action="store_true",
                         help="Emit GitHub Actions annotations so CI shows each issue inline")
 
 
 def main():
-    """Parse the command line and run the chosen subcommand; returns the exit code."""
+    """Run the subcommand given; returns its exit code, 2 if none was given or it crashed."""
     parser = argparse.ArgumentParser(
         prog="kdk",
         description="KDK - Kodi skin validation tool (CLI). Use kdk-gui for the GUI.",
@@ -204,9 +212,13 @@ def main():
 
     if not args.command:
         parser.print_help(sys.stderr)
-        return 1
+        return FAILED
 
-    return args.func(args)
+    try:
+        return args.func(args)
+    except Exception:
+        traceback.print_exc()
+        return FAILED
 
 
 if __name__ == "__main__":
