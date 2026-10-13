@@ -12,6 +12,27 @@ import traceback
 FAILED = 2
 
 
+def fail(message, as_json):
+    """Report a run kdk could not finish, as the JSON error object when asked; returns 2."""
+    if as_json:
+        from kdk.output.payload import render_error
+        print(json.dumps(render_error(message), indent=2))
+    else:
+        print(f"Error: {message}", file=sys.stderr)
+    return FAILED
+
+
+class Parser(argparse.ArgumentParser):
+    """Argument parser that reports a bad command line as the JSON error object under --json."""
+
+    def error(self, message):
+        """Exit 2 after the usage, with the error object on stdout when JSON was asked for."""
+        if "--json" not in sys.argv[1:]:
+            super().error(message)
+        self.print_usage(sys.stderr)
+        sys.exit(fail(message, True))
+
+
 def real_issues(issues):
     """Drop the sentinel rows checks return when clean: no severity and no source line."""
     return [i for i in issues if i.get("severity") or (i.get("line") or 0) > 0]
@@ -49,15 +70,14 @@ def exit_code(issues, args):
 
 
 def cmd_validate(args):
-    """Validate a skin, then show, save or print its issues; returns the exit code."""
+    """Validate a skin and cache its run, then show, save or print its issues; returns exit code."""
     from kdk.core import CHECK_SEQUENCE, save_report, validate_skin
     from kdk.output.cache import save as save_run
-    from kdk.output.payload import render_error, render_json
+    from kdk.output.payload import render_json
 
     skin_path = os.path.abspath(args.path)
     if not os.path.isdir(skin_path):
-        print(f"Error: {skin_path} is not a directory", file=sys.stderr)
-        return FAILED
+        return fail(f"{skin_path} is not a directory", args.json)
 
     overrides = {}
     if args.language:
@@ -75,12 +95,7 @@ def cmd_validate(args):
             result = validate_skin(skin_path, config_overrides=overrides, isolated=args.isolated, progress_callback=bar.update)
 
     if result["error"]:
-        if args.json:
-            json.dump(render_error(result["error"]), sys.stdout, indent=2)
-            print()
-        else:
-            print(f"Error: {result['error']}", file=sys.stderr)
-        return FAILED
+        return fail(result["error"], args.json)
 
     save_run(skin_path, result, result["issues"])
     issues = visible_issues(result["issues"], args)
@@ -127,8 +142,7 @@ def cmd_issues(args):
     skin_path = os.path.abspath(args.path)
     run = load_run(skin_path)
     if not run:
-        print(f"No cached run for {skin_path} - run 'kdk validate' first", file=sys.stderr)
-        return FAILED
+        return fail(f"No cached run for {skin_path} - run 'kdk validate' first", args.json)
 
     issues = visible_issues(run["issues"], args)
 
@@ -178,7 +192,7 @@ def main():
     """Run the subcommand given; returns its exit code, 2 if none was given or it crashed."""
     from kdk.libs.addon.addon import Addon
 
-    parser = argparse.ArgumentParser(
+    parser = Parser(
         prog="kdk",
         description="KDK - Kodi skin validation tool (CLI). Use kdk-gui for the GUI.",
     )
@@ -224,9 +238,9 @@ def main():
 
     try:
         return args.func(args)
-    except Exception:
+    except Exception as e:
         traceback.print_exc()
-        return FAILED
+        return fail(f"kdk crashed: {e!r}", args.json)
 
 
 if __name__ == "__main__":

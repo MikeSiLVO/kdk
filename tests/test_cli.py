@@ -14,9 +14,14 @@ SKIN = Path(__file__).resolve().parent / "fixtures" / "dirty_skin"
 
 def run(*args, prelude="pass"):
     """Run `kdk` in a subprocess with the arguments, after any setup code; returns its exit code."""
+    return _process(*args, prelude=prelude).returncode
+
+
+def _process(*args, prelude="pass"):
+    """Run `kdk` in a subprocess after the setup code; returns the finished process and output."""
     code = f"import sys\n{prelude}\nfrom kdk.__main__ import main\nsys.argv = ['kdk'] + sys.argv[1:]\nsys.exit(main())"
     env = dict(os.environ, PYTHONPATH=str(SRC))
-    return subprocess.run([sys.executable, "-c", code, *args], capture_output=True, env=env, check=False).returncode
+    return subprocess.run([sys.executable, "-c", code, *args], capture_output=True, text=True, env=env, check=False)
 
 
 def test_errors_exit_one_unless_exit_zero():
@@ -54,3 +59,16 @@ def test_release_flag_picks_the_release_checked(tmp_path):
     assert payload["kodi_release"] == "piers"
     assert not [i for i in payload["categories"].get("Kodi Repo", []) if "will not load" in i["message"]]
     assert run("validate", "--json", "--release", "nexus", str(SKIN)) == 2
+
+
+def test_every_failure_prints_the_error_object_under_json():
+    """A bad flag, a missing folder and a crash each print the error object to stdout."""
+    crash = "import kdk.core; kdk.core.validate_skin = lambda *a, **k: 1 / 0"
+    for args, prelude, expected in ((("--release", "nope", str(SKIN)), "pass", "invalid choice: 'nope'"),
+                                    ((str(SKIN / "missing"),), "pass", "is not a directory"),
+                                    ((str(SKIN),), crash, "ZeroDivisionError")):
+        proc = _process("validate", "--json", *args, prelude=prelude)
+        payload = json.loads(proc.stdout)
+        assert proc.returncode == 2
+        assert (payload["format_version"], set(payload)) == (1, {"format_version", "kdk_version", "error"})
+        assert expected in payload["error"]

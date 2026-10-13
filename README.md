@@ -104,7 +104,8 @@ kdk validate --strict .
 ```
 
 `--exit-zero` gives `0` for any finished run, so a non-zero code only ever means
-kdk failed.
+kdk failed. With `--json`, a failed run prints `format_version`, `kdk_version` and
+`error` in place of the results.
 
 ## GitHub Actions
 
