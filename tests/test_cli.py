@@ -1,5 +1,6 @@
 """Exit codes of the kdk command line (kdk-only, no editor counterpart)."""
 
+import json
 import os
 import subprocess
 import sys
@@ -43,3 +44,13 @@ def test_isolated_ignores_both_config_files(tmp_path, monkeypatch):
     isolated = config.load_config(str(tmp_path), {"kodi_path": "/kodi"}, isolated=True)
     assert "kodi_release" not in isolated
     assert (isolated["language"], isolated["kodi_path"]) == (config.DEFAULTS["language"], "/kodi")
+
+
+def test_release_flag_picks_the_release_checked(tmp_path):
+    """The named release is the one checked; a name kdk does not know stops the run."""
+    out = tmp_path / "run.json"
+    assert run("validate", "--json", "--release", "piers", "-o", str(out), str(SKIN)) == 1
+    payload = json.loads(out.read_text())
+    assert payload["kodi_release"] == "piers"
+    assert not [i for i in payload["categories"].get("Kodi Repo", []) if "will not load" in i["message"]]
+    assert run("validate", "--json", "--release", "nexus", str(SKIN)) == 2

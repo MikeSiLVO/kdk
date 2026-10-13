@@ -92,6 +92,10 @@ Both commands take `--json` for machine-readable output, `--output` to write to
 a file, and `--show-include-warnings` to stop filtering warnings that originate
 inside include content.
 
+`validate --release omega` or `--release piers` checks against that Kodi release
+instead of the one the `xbmc.gui` version in addon.xml gives, and reports a skin
+that release will not load.
+
 Exit code is `1` if any errors are found, `2` when kdk could not finish the run,
 and `0` otherwise. Add `--strict` to fail on warnings too:
 

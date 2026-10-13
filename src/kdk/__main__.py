@@ -64,6 +64,8 @@ def cmd_validate(args):
         overrides["language"] = args.language
     if args.kodi_path:
         overrides["kodi_path"] = args.kodi_path
+    if args.release:
+        overrides["kodi_release"] = args.release
 
     if args.json or args.quiet:
         result = validate_skin(skin_path, config_overrides=overrides, isolated=args.isolated)
@@ -174,6 +176,8 @@ def add_filters(parser):
 
 def main():
     """Run the subcommand given; returns its exit code, 2 if none was given or it crashed."""
+    from kdk.libs.addon.addon import Addon
+
     parser = argparse.ArgumentParser(
         prog="kdk",
         description="KDK - Kodi skin validation tool (CLI). Use kdk-gui for the GUI.",
@@ -193,6 +197,8 @@ def main():
     p_validate.add_argument("--output", "-o", help="Write output to this path")
     p_validate.add_argument("--language", help="Language code (e.g. resource.language.en_gb)")
     p_validate.add_argument("--kodi-path", help="Path to Kodi installation")
+    p_validate.add_argument("--release", choices=[r["name"] for r in Addon.RELEASES],
+                            help="Kodi release to check against, instead of the one addon.xml gives")
     p_validate.add_argument("--isolated", action="store_true",
                             help="Ignore the user config and the skin's .kdk.json")
     add_filters(p_validate)
