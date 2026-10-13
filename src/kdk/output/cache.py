@@ -30,15 +30,10 @@ def _cache_file(skin_path: str) -> Path:
 
 
 def save(skin_path: str, result: dict, issues: dict) -> None:
-    """Store a finished run unfiltered, so `kdk issues` can re-filter without revalidating."""
+    """Save a finished run unfiltered, for `kdk issues` to re-filter without revalidating."""
     path = _cache_file(skin_path)
-    payload = {
-        "skin_name": result["skin_name"],
-        "skin_path": result["skin_path"],
-        "timestamp": result["timestamp"],
-        "duration": result["duration"],
-        "issues": issues,
-    }
+    keys = ("skin_name", "skin_path", "timestamp", "duration", "kodi_release", "info_source", "notices")
+    payload = {**{key: result.get(key) for key in keys}, "issues": issues}
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:

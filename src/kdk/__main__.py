@@ -46,7 +46,7 @@ def cmd_validate(args):
     """Validate a skin, then show, save or print its issues; returns the exit code."""
     from kdk.core import CHECK_SEQUENCE, save_report, validate_skin
     from kdk.output.cache import save as save_run
-    from kdk.output.payload import render_json
+    from kdk.output.payload import render_error, render_json
 
     skin_path = os.path.abspath(args.path)
     if not os.path.isdir(skin_path):
@@ -68,7 +68,7 @@ def cmd_validate(args):
 
     if result["error"]:
         if args.json:
-            json.dump({"error": result["error"]}, sys.stdout, indent=2)
+            json.dump(render_error(result["error"]), sys.stdout, indent=2)
             print()
         else:
             print(f"Error: {result['error']}", file=sys.stderr)

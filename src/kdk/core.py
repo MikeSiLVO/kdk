@@ -30,7 +30,7 @@ CHECK_SEQUENCE = [
 
 
 def filter_include_warnings(all_issues: dict) -> dict:
-    """Drop warnings sourced from `<include>` content (kept if severity is `error`); reduces false positives."""
+    """Drop the warnings that come from include content, keeping its errors."""
     filtered = {}
     for category, issues in all_issues.items():
         filtered[category] = [
@@ -46,7 +46,7 @@ def validate_skin(
     config_overrides: dict | None = None,
     progress_callback: Callable[[int, int, str], None] | None = None,
 ) -> dict:
-    """Run every check against the skin at `skin_path`. Returns `{issues, skin_name, skin_path, timestamp, duration, error}`."""
+    """Validate a skin with every check; returns issues, release, notices, timing, or an error."""
     skin_path = os.path.abspath(skin_path)
     config = load_config(skin_path, config_overrides)
     settings = Settings(config)
@@ -83,8 +83,7 @@ def validate_skin(
             "error": f"Failed to load addon at {skin_path}",
         }
 
-    # Defensive: a fresh `init_addon` already builds a new `Skin`, but if a
-    # caller ever swaps to reusing one we want stale resolved trees gone.
+    # a reused Skin would carry stale resolved trees
     cache = getattr(provider.addon, "_resolved_windows_cache", None)
     if isinstance(cache, dict):
         cache.clear()
@@ -117,8 +116,8 @@ def validate_skin(
                 all_issues[name] = method(progress_callback=step_progress) or []
             except Exception as e:
                 logger.error("Check %s failed: %s", name, e, exc_info=True)
-                # Severity matters: without it the row is filtered out of every
-                # output mode and the run exits 0 despite the check never running.
+                provider.addon.add_notice(f"The {name} check failed, so its results are missing: {e}")
+                # without a severity the row is filtered out and the run exits 0
                 all_issues[name] = [{
                     "message": f"Check failed: {e}",
                     "file": "", "line": 0, "severity": SEVERITY_ERROR,
@@ -135,6 +134,9 @@ def validate_skin(
         "skin_path": skin_path,
         "timestamp": timestamp,
         "duration": duration,
+        "kodi_release": provider.addon.api_version,
+        "info_source": "snapshot",
+        "notices": list(provider.addon.notices),
         "error": None,
     }
 
@@ -149,7 +151,7 @@ def get_downloads_folder() -> str:
 
 
 def save_report(result: dict, output_path: str | None = None) -> str:
-    """Write `result` (from `validate_skin`) as a text report; defaults to a timestamped file in the Downloads folder."""
+    """Save a validate result as a text report, by default a timestamped file in Downloads."""
     if output_path is None:
         safe_name = "".join(
             c if c.isalnum() or c in ("-", "_") else "_"
