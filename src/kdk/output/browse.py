@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from .render import console, count_cells, render_issues, severity_counts
+from .payload import severity_counts
+from .render import console, count_cells, render_issues
 
 
 def _menu(issues):

@@ -1,27 +1,10 @@
-"""Live progress for a validation run, and the log muting that keeps it readable."""
+"""Live progress for a validation run."""
 
 from __future__ import annotations
-
-import logging
 
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskID, TextColumn, TimeElapsedColumn
 
 from .render import err_console
-
-
-class DedupeFilter(logging.Filter):
-    """Pass each distinct message once; one bad include resolved in 80 places logs 80 times."""
-
-    def __init__(self):
-        super().__init__()
-        self._seen = set()
-
-    def filter(self, record):
-        key = (record.name, record.levelno, record.getMessage())
-        if key in self._seen:
-            return False
-        self._seen.add(key)
-        return True
 
 
 class RunProgress:
@@ -64,16 +47,3 @@ class RunProgress:
         phase = message.split(":", 1)[0].strip().rstrip(".")
         self._progress.update(self._task, completed=step, total=total, description=phase)
 
-
-def quiet_engine_logging(debug=False):
-    """Route engine logs to stderr, deduplicated, and mute the per-file INFO narration."""
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
-    handler.addFilter(DedupeFilter())
-
-    root = logging.getLogger()
-    root.handlers = [handler]
-    root.setLevel(logging.DEBUG if debug else logging.ERROR)
-
-    # Whatever the engine logs below ERROR is already a reported issue
-    logging.getLogger("kdk").setLevel(logging.DEBUG if debug else logging.ERROR)

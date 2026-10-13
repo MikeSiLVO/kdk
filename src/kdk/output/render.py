@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
-from collections import Counter, defaultdict
+from collections import defaultdict
 
 from rich.console import Console
 from rich.padding import Padding
@@ -12,6 +12,8 @@ from rich.table import Table
 from rich.text import Text
 
 from kdk.libs.validation.constants import SEVERITY_ERROR, SEVERITY_WARNING
+
+from .payload import counts, relative, severity_counts
 
 # Redirected output would otherwise wrap at rich's 80-column default
 _PIPE_WIDTH = 200
@@ -27,24 +29,12 @@ SEVERITY_STYLE = {
 
 
 def severity_parts(severity):
-    """Short label and colour for a severity, defaulting to a dim `info`."""
+    """Short label and color for a severity, defaulting to a dim `info`."""
     return SEVERITY_STYLE.get(severity, ("info", "dim"))
 
 
 def _plural(count, noun):
     return noun if count == 1 else f"{noun}s"
-
-
-def counts(issues):
-    """Error and warning totals across a `{category: [issue]}` map."""
-    flat = [i for rows in issues.values() for i in rows]
-    return severity_counts(flat)
-
-
-def severity_counts(rows):
-    """Error and warning totals for one flat list of issues."""
-    by_severity = Counter(i.get("severity") for i in rows)
-    return by_severity[SEVERITY_ERROR], by_severity[SEVERITY_WARNING]
 
 
 def count_cells(errors, warnings):
@@ -89,24 +79,12 @@ def render_summary(result, issues):
     console.print()
 
 
-def _relative(path, root):
-    """Path relative to `root`, falling back to the original when it isn't under it."""
-    if not path:
-        return ""
-    try:
-        rel = os.path.relpath(path, root).replace(os.sep, "/")
-    except ValueError:
-        return path
-    # A path outside root relativises to a run of `..`, which helps nobody
-    return path if rel.startswith("../") else rel
-
-
 def render_issues(issues, skin_path, *, show_category=True):
-    """Print issues grouped by file and sorted by line, collapsing repeats of one message."""
+    """Render issues grouped by file and sorted by line, collapsing repeats of one message."""
     by_file = defaultdict(list)
     for category, rows in issues.items():
         for issue in rows:
-            by_file[_relative(issue.get("file"), skin_path)].append((category, issue))
+            by_file[relative(issue.get("file"), skin_path)].append((category, issue))
 
     if not by_file:
         console.print("  [green]No issues found[/]")
@@ -146,7 +124,7 @@ def _escape(text, *, prop=False):
 
 
 def render_github(issues):
-    """Emit one workflow command per issue so CI shows them as inline annotations."""
+    """Render one workflow command per issue so CI shows them as inline annotations."""
     # Annotations anchor to the checkout root, which is not always the skin root
     root = os.environ.get("GITHUB_WORKSPACE") or os.getcwd()
 
@@ -155,7 +133,7 @@ def render_github(issues):
             level = {SEVERITY_ERROR: "error", SEVERITY_WARNING: "warning"}.get(
                 issue.get("severity"), "notice"
             )
-            path = _relative(issue.get("file"), root)
+            path = relative(issue.get("file"), root)
             parts = [f"title={_escape(category, prop=True)}"]
             if path:
                 parts.insert(0, f"file={_escape(path, prop=True)}")
@@ -168,16 +146,3 @@ def render_github(issues):
                 soft_wrap=True,
             )
 
-
-def render_json(result, issues):
-    """Machine-readable payload mirroring what the terminal shows."""
-    total_errors, total_warnings = counts(issues)
-    return {
-        "skin_name": result["skin_name"],
-        "skin_path": result["skin_path"],
-        "timestamp": result["timestamp"],
-        "duration_seconds": round(result["duration"], 2),
-        "errors": total_errors,
-        "warnings": total_warnings,
-        "categories": {c: rows for c, rows in issues.items() if rows},
-    }

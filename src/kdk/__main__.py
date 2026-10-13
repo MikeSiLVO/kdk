@@ -33,8 +33,8 @@ def visible_issues(raw, args):
 
 
 def exit_code(issues, strict):
-    """1 on errors, or on anything at all under --strict."""
-    from kdk.output import counts
+    """1 on errors, or on warnings too when warnings count as failures."""
+    from kdk.output.payload import counts
 
     errors, warnings = counts(issues)
     if errors:
@@ -43,11 +43,10 @@ def exit_code(issues, strict):
 
 
 def cmd_validate(args):
+    """Validate a skin, then show, save or print its issues; returns the exit code."""
     from kdk.core import CHECK_SEQUENCE, save_report, validate_skin
-    from kdk.output import (
-        RunProgress, browse, console, render_github, render_issues, render_json,
-        render_summary, save_run,
-    )
+    from kdk.output.cache import save as save_run
+    from kdk.output.payload import render_json
 
     skin_path = os.path.abspath(args.path)
     if not os.path.isdir(skin_path):
@@ -60,8 +59,12 @@ def cmd_validate(args):
     if args.kodi_path:
         overrides["kodi_path"] = args.kodi_path
 
-    with RunProgress(skin_path, len(CHECK_SEQUENCE), enabled=not args.json and not args.quiet) as bar:
-        result = validate_skin(skin_path, config_overrides=overrides, progress_callback=bar.update)
+    if args.json or args.quiet:
+        result = validate_skin(skin_path, config_overrides=overrides)
+    else:
+        from kdk.output.progress import RunProgress
+        with RunProgress(skin_path, len(CHECK_SEQUENCE)) as bar:
+            result = validate_skin(skin_path, config_overrides=overrides, progress_callback=bar.update)
 
     if result["error"]:
         if args.json:
@@ -85,6 +88,9 @@ def cmd_validate(args):
             print(text)
         return exit_code(issues, args.strict)
 
+    from kdk.output.browse import browse
+    from kdk.output.render import console, render_github, render_issues, render_summary
+
     if args.github:
         render_github(issues)
 
@@ -106,7 +112,9 @@ def cmd_validate(args):
 
 
 def cmd_issues(args):
-    from kdk.output import browse, console, load_run, render_github, render_issues, render_json, render_summary
+    """Show the issues of the last validate run of a skin; returns the exit code."""
+    from kdk.output.cache import load as load_run
+    from kdk.output.payload import render_json
 
     skin_path = os.path.abspath(args.path)
     run = load_run(skin_path)
@@ -119,6 +127,9 @@ def cmd_issues(args):
     if args.json:
         print(json.dumps(render_json(run, issues), indent=2))
         return exit_code(issues, args.strict)
+
+    from kdk.output.browse import browse
+    from kdk.output.render import console, render_github, render_issues, render_summary
 
     if args.github:
         render_github(issues)
@@ -154,6 +165,7 @@ def add_filters(parser):
 
 
 def main():
+    """Parse the command line and run the chosen subcommand; returns the exit code."""
     parser = argparse.ArgumentParser(
         prog="kdk",
         description="KDK - Kodi skin validation tool (CLI). Use kdk-gui for the GUI.",
@@ -163,8 +175,7 @@ def main():
     subparsers = parser.add_subparsers(dest="command")
 
     p_validate = subparsers.add_parser("validate", help="Validate a Kodi skin")
-    # SUPPRESS so omitting it here does not overwrite the same flag given
-    # before the subcommand.
+    # SUPPRESS so omitting it here keeps the same flag given before the subcommand
     p_validate.add_argument("--debug", action="store_true", default=argparse.SUPPRESS,
                             help="Enable debug logging")
     p_validate.add_argument("path", nargs="?", default=".", help="Path to the skin addon directory")
@@ -188,7 +199,7 @@ def main():
 
     args = parser.parse_args()
 
-    from kdk.output import quiet_engine_logging
+    from kdk.output.logs import quiet_engine_logging
     quiet_engine_logging(args.debug)
 
     if not args.command:
