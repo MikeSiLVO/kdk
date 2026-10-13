@@ -66,11 +66,11 @@ def cmd_validate(args):
         overrides["kodi_path"] = args.kodi_path
 
     if args.json or args.quiet:
-        result = validate_skin(skin_path, config_overrides=overrides)
+        result = validate_skin(skin_path, config_overrides=overrides, isolated=args.isolated)
     else:
         from kdk.output.progress import RunProgress
         with RunProgress(skin_path, len(CHECK_SEQUENCE)) as bar:
-            result = validate_skin(skin_path, config_overrides=overrides, progress_callback=bar.update)
+            result = validate_skin(skin_path, config_overrides=overrides, isolated=args.isolated, progress_callback=bar.update)
 
     if result["error"]:
         if args.json:
@@ -193,6 +193,8 @@ def main():
     p_validate.add_argument("--output", "-o", help="Write output to this path")
     p_validate.add_argument("--language", help="Language code (e.g. resource.language.en_gb)")
     p_validate.add_argument("--kodi-path", help="Path to Kodi installation")
+    p_validate.add_argument("--isolated", action="store_true",
+                            help="Ignore the user config and the skin's .kdk.json")
     add_filters(p_validate)
     p_validate.set_defaults(func=cmd_validate)
 

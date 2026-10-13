@@ -165,6 +165,8 @@ Settings are loaded in priority order:
    - Windows: `%APPDATA%\kdk\config.json`
 4. Built-in defaults
 
+`--isolated` skips both config files, so only CLI flags and the defaults apply.
+
 Example config file:
 
 ```json

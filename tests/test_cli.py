@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from kdk import config
+
 SRC = Path(__file__).resolve().parent.parent / "src"
 SKIN = Path(__file__).resolve().parent / "fixtures" / "dirty_skin"
 
@@ -28,3 +30,16 @@ def test_kdk_failure_exits_two_even_with_exit_zero():
     assert run("validate", "--json", "--exit-zero", str(SKIN / "missing")) == 2
     crash = "import kdk.core; kdk.core.validate_skin = lambda *a, **k: 1 / 0"
     assert run("validate", "--json", "--exit-zero", str(SKIN), prelude=crash) == 2
+
+
+def test_isolated_ignores_both_config_files(tmp_path, monkeypatch):
+    """Only the defaults and the overrides apply to an isolated run."""
+    user = tmp_path / "user.json"
+    user.write_text('{"language": "resource.language.de_de"}')
+    (tmp_path / ".kdk.json").write_text('{"kodi_release": "omega"}')
+    monkeypatch.setattr(config, "_user_config_path", lambda: user)
+    shared = config.load_config(str(tmp_path))
+    assert (shared["language"], shared["kodi_release"]) == ("resource.language.de_de", "omega")
+    isolated = config.load_config(str(tmp_path), {"kodi_path": "/kodi"}, isolated=True)
+    assert "kodi_release" not in isolated
+    assert (isolated["language"], isolated["kodi_path"]) == (config.DEFAULTS["language"], "/kodi")

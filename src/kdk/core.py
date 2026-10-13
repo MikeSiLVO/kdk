@@ -44,11 +44,12 @@ def validate_skin(
     skin_path: str,
     *,
     config_overrides: dict | None = None,
+    isolated: bool = False,
     progress_callback: Callable[[int, int, str], None] | None = None,
 ) -> dict:
     """Validate a skin with every check; returns issues, release, notices, timing, or an error."""
     skin_path = os.path.abspath(skin_path)
-    config = load_config(skin_path, config_overrides)
+    config = load_config(skin_path, config_overrides, isolated)
     settings = Settings(config)
     total_steps = len(CHECK_SEQUENCE)
 

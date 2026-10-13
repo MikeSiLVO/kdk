@@ -1,4 +1,4 @@
-"""Plain-JSON config. Precedence: CLI overrides > `.kdk.json` (skin dir) > `~/.config/kdk/config.json` > defaults."""
+"""JSON config, first wins: CLI flags, the skin's `.kdk.json`, the user config, defaults."""
 
 from __future__ import annotations
 
@@ -42,19 +42,19 @@ EDITOR_PATTERNS = {
 }
 
 
-def load_config(skin_path: str | None = None, overrides: dict | None = None) -> dict:
-    """Merge defaults, OS-native user config, `<skin_path>/.kdk.json`, and `overrides` (in that order)."""
+def load_config(skin_path: str | None = None, overrides: dict | None = None, isolated=False) -> dict:
+    """Merge the defaults, optionally the user and skin config files, then the overrides."""
     config = dict(DEFAULTS)
 
     user_config = _user_config_path()
-    if user_config.exists():
+    if not isolated and user_config.exists():
         try:
             with open(user_config) as f:
                 config.update(json.load(f))
         except Exception as e:
             logger.warning("Failed to load user config %s: %s", user_config, e)
 
-    if skin_path:
+    if skin_path and not isolated:
         project_config_path = Path(skin_path) / ".kdk.json"
         if project_config_path.exists():
             try:
@@ -163,7 +163,7 @@ def save_user_config(key: str, value) -> None:
 
 
 def _resolve_editor_exe(exe_name: str, editor_key: str) -> str | None:
-    """Resolve `exe_name` via PATH, falling back to known Windows install paths; `None` means use `exe_name` as-is."""
+    """Resolve an editor from Windows install paths when PATH lacks it; None to run it as named."""
     import shutil
     import sys
 
@@ -196,18 +196,12 @@ def _resolve_editor_exe(exe_name: str, editor_key: str) -> str | None:
 
 
 def _resolve_sublime_exe() -> str | None:
-    """Find a Sublime executable.
-
-    Prefer `subl.exe` (the CLI wrapper) over `sublime_text.exe` because the
-    wrapper routes args through Sublime's existing-instance IPC. Calling
-    `sublime_text.exe` directly on Windows can spawn a new (hidden) instance
-    that receives the line jump while the user's visible Sublime stays put -
-    making the jump look broken even when it technically worked.
-    """
+    """Resolve a Sublime executable, `subl` before `sublime_text`."""
     import shutil
     import sys
 
     if sys.platform == "win32":
+        # subl reaches the open window; sublime_text.exe can start a hidden second instance
         candidates = [
             r"%PROGRAMFILES%\Sublime Text\subl.exe",
             r"%PROGRAMFILES%\Sublime Text 3\subl.exe",
@@ -224,12 +218,7 @@ def _resolve_sublime_exe() -> str | None:
 
 
 def _open_in_sublime(file_path: str, line: int) -> bool:
-    """Open `file_path` at `line` in Sublime via `subl FILE:LINE:COL`.
-
-    The path is normalized to forward slashes - Sublime's path:line:col parser
-    is happier with forward-slash paths on Windows even though backslash paths
-    are documented to work too.
-    """
+    """Open a file at a line in Sublime, passed as `FILE:LINE:COL`."""
     import subprocess
 
     exe = _resolve_sublime_exe()
@@ -237,6 +226,7 @@ def _open_in_sublime(file_path: str, line: int) -> bool:
         logger.warning("Sublime not found")
         return False
 
+    # Sublime's path:line:col parsing is more reliable with forward slashes on Windows
     abs_path = os.path.abspath(file_path).replace("\\", "/")
     arg = f"{abs_path}:{int(line)}:0" if line and line > 0 else abs_path
     try:
@@ -248,7 +238,7 @@ def _open_in_sublime(file_path: str, line: int) -> bool:
 
 
 def open_in_editor(file_path: str, line: int = 1, editor: str = "") -> bool:
-    """Open `file_path:line` in `editor`; falls back to OS default if `editor` is empty or missing."""
+    """Open a file at a line in the chosen editor, else in the OS default app."""
     import subprocess
     import sys
 
@@ -271,7 +261,7 @@ def open_in_editor(file_path: str, line: int = 1, editor: str = "") -> bool:
         except FileNotFoundError:
             logger.warning("Editor %r not found, falling back to OS default", editor)
 
-    # OS default opener can't take a line number.
+    # OS default opener can't take a line number
     try:
         if sys.platform == "win32":
             os.startfile(file_path)
