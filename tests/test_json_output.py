@@ -42,6 +42,13 @@ def test_payload_carries_versions_release_and_notices():
     assert isinstance(payload["notices"], list)
 
 
+def test_payload_holds_no_absolute_path():
+    """Nothing in the output names where the skin sits on disk."""
+    proc = run_json()
+    assert str(SKIN) not in proc.stdout
+    assert "skin_path" not in json.loads(proc.stdout)
+
+
 def test_paths_are_skin_relative_and_rows_sorted():
     """Every path key is relative to the skin, and rows run by file, then line."""
     root = os.path.join(os.sep, "skins", "skin.test")

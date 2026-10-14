@@ -60,7 +60,6 @@ def render_json(result, issues):
         "info_source": result.get("info_source"),
         "notices": result.get("notices") or [],
         "skin_name": result["skin_name"],
-        "skin_path": result["skin_path"],
         "timestamp": result["timestamp"],
         "duration_seconds": round(result["duration"], 2),
         "errors": total_errors,
