@@ -3,6 +3,7 @@
 import os
 from datetime import datetime
 from ..validation.constants import SEVERITY_ERROR, SEVERITY_WARNING
+from ..validation.suppress import muted_note
 
 
 def generate_text_report(all_issues, skin_name, skin_path, output_path=None):
@@ -13,10 +14,13 @@ def generate_text_report(all_issues, skin_name, skin_path, output_path=None):
 
     total_errors = 0
     total_warnings = 0
+    total_muted = 0
     for issues in filtered.values():
         for issue in issues:
             sev = issue.get("severity", "warning")
-            if sev == SEVERITY_ERROR:
+            if issue.get("muted"):
+                total_muted += 1
+            elif sev == SEVERITY_ERROR:
                 total_errors += 1
             elif sev == SEVERITY_WARNING:
                 total_warnings += 1
@@ -29,7 +33,8 @@ def generate_text_report(all_issues, skin_name, skin_path, output_path=None):
     lines.append(f"Skin:      {skin_name}")
     lines.append(f"Path:      {skin_path}")
     lines.append(f"Generated: {timestamp}")
-    lines.append(f"Total:     {total_errors} errors, {total_warnings} warnings")
+    lines.append(f"Total:     {total_errors} errors, {total_warnings} warnings"
+                 + (f", {total_muted} muted" if total_muted else ""))
 
     lines.append("")
 
@@ -38,10 +43,12 @@ def generate_text_report(all_issues, skin_name, skin_path, output_path=None):
     lines.append("-" * 80)
 
     for category, issues in filtered.items():
-        errors = sum(1 for i in issues if i.get("severity") == SEVERITY_ERROR)
-        warnings = sum(1 for i in issues if i.get("severity") == SEVERITY_WARNING)
-        if errors or warnings:
-            lines.append(f"{category:<25s} {errors:>8d} {warnings:>10d}")
+        counted = [i for i in issues if not i.get("muted")]
+        errors = sum(1 for i in counted if i.get("severity") == SEVERITY_ERROR)
+        warnings = sum(1 for i in counted if i.get("severity") == SEVERITY_WARNING)
+        muted = len(issues) - len(counted)
+        if errors or warnings or muted:
+            lines.append(f"{category:<25s} {errors:>8d} {warnings:>10d}" + (f"   {muted} muted" if muted else ""))
 
     lines.append("-" * 80)
     lines.append("")
@@ -81,6 +88,8 @@ def generate_text_report(all_issues, skin_name, skin_path, output_path=None):
                 inc_suffix = f"  (from include: {inc_name})" if inc_name else ""
 
                 lines.append(f"    {marker} L{line_num:<5d} {message}{inc_suffix}")
+                if issue.get("muted"):
+                    lines.append(f"             {muted_note(issue)}")
 
             lines.append("")
 

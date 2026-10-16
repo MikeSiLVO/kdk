@@ -58,12 +58,12 @@ def visible_issues(raw, args):
 
 
 def exit_code(issues, args):
-    """1 on errors, or warnings too when they count as failures; 0 for a finished run if asked."""
+    """1 on errors, or warnings counted as failures, muted ones never; 0 when asked."""
     from kdk.output.payload import counts
 
     if args.exit_zero:
         return 0
-    errors, warnings = counts(issues)
+    errors, warnings, _ = counts(issues)
     if errors:
         return 1
     return 1 if args.strict and warnings else 0
@@ -112,10 +112,12 @@ def cmd_validate(args):
         return exit_code(issues, args)
 
     from kdk.output.browse import browse
+    from kdk.output.payload import unmuted
     from kdk.output.render import console, render_github, render_issues, render_summary
 
+    listed = unmuted(issues)
     if args.github:
-        render_github(issues)
+        render_github(listed)
 
     render_summary(result, issues)
 
@@ -124,12 +126,12 @@ def cmd_validate(args):
         console.print(f"  [dim]Report saved: {report_path}[/]")
         console.print()
 
-    if issues and not args.quiet:
+    if listed and not args.quiet:
         interactive = console.is_terminal and not args.list and sys.stdin.isatty()
         if interactive:
-            browse(issues, skin_path)
+            browse(listed, skin_path)
         else:
-            render_issues(issues, skin_path)
+            render_issues(listed, skin_path)
 
     return exit_code(issues, args)
 
@@ -151,19 +153,21 @@ def cmd_issues(args):
         return exit_code(issues, args)
 
     from kdk.output.browse import browse
+    from kdk.output.payload import unmuted
     from kdk.output.render import console, render_github, render_issues, render_summary
 
+    listed = unmuted(issues)
     if args.github:
-        render_github(issues)
+        render_github(listed)
 
     console.print()
     console.print(f"  [bold]{run['skin_name']}[/]  [dim]validated {run['timestamp']}[/]")
     console.print()
 
     if args.browse and console.is_terminal and sys.stdin.isatty():
-        browse(issues, skin_path)
+        browse(listed, skin_path)
     else:
-        render_issues(issues, skin_path)
+        render_issues(listed, skin_path)
 
     if args.summary:
         render_summary(run, issues)

@@ -33,20 +33,16 @@ def severity_parts(severity):
     return SEVERITY_STYLE.get(severity, ("info", "dim"))
 
 
-def _plural(count, noun):
-    return noun if count == 1 else f"{noun}s"
+_COUNT_WORDS = (("error", "errors", "red"), ("warning", "warnings", "yellow"), ("muted", "muted", "dim"))
 
 
-def count_cells(errors, warnings):
-    """`N errors, M warnings` split after the leading number so a table can align on it."""
-    if errors and warnings:
-        return (
-            f"[red]{errors}[/]",
-            f"[red]{_plural(errors, 'error')}[/], [yellow]{warnings} {_plural(warnings, 'warning')}[/]",
-        )
-    if errors:
-        return f"[red]{errors}[/]", f"[red]{_plural(errors, 'error')}[/]"
-    return f"[yellow]{warnings}[/]", f"[yellow]{_plural(warnings, 'warning')}[/]"
+def count_cells(errors, warnings, muted=0):
+    """`N errors, M warnings, K muted` split after the leading number so a table can align on it."""
+    parts = [(n, one if n == 1 else many, colour)
+             for n, (one, many, colour) in zip((errors, warnings, muted), _COUNT_WORDS) if n]
+    lead, word, colour = parts[0] if parts else (0, "warnings", "yellow")
+    detail = ", ".join([f"[{colour}]{word}[/]"] + [f"[{c}]{n} {w}[/]" for n, w, c in parts[1:]])
+    return f"[{colour}]{lead}[/]", detail
 
 
 def render_summary(result, issues):
@@ -70,11 +66,11 @@ def render_summary(result, issues):
         console.print(Padding(table, (0, 0, 0, 2), expand=False))
         console.print()
 
-    total_errors, total_warnings = counts(issues)
+    total_errors, total_warnings, total_muted = counts(issues)
     if not total_errors and not total_warnings:
-        console.print("  [green]No issues found[/]")
+        console.print("  [green]No issues found[/]" + (f"  [dim]{total_muted} muted[/]" if total_muted else ""))
     else:
-        count, detail = count_cells(total_errors, total_warnings)
+        count, detail = count_cells(total_errors, total_warnings, total_muted)
         console.print(f"  {count} {detail}")
     console.print()
 

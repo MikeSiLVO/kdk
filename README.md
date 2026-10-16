@@ -129,34 +129,34 @@ Linux and Android, so a Windows-only check cannot find that class of bug.
 
 An XML comment mutes findings the skin has already judged, the way a
 `# type: ignore` does in Python. Put it at the top of a file to cover the whole
-file, or on a line to cover just that line:
+file, or on a line to cover just that line. Text after a `;` is the reason, shown
+to anyone reading the results:
 
 ```xml
-<!-- kdk-ignore-file: labels -->        whole file, Labels only
-<!-- kdk-ignore-file -->                whole file, every check
-<!-- kdk-ignore: labels, images -->     one line, Labels and Images
-<!-- kdk-ignore -->                     one line, every check
+<!-- kdk-ignore-file: labels; debug overlay -->   whole file, Labels only
+<!-- kdk-ignore: labels, images; add-on name -->   one line, Labels and Images
+<!-- kdk-ignore: labels -->                        one line, Labels, no reason
+<!-- kdk-ignore -->                                one line, every check
 ```
 
 Both placements work. A directive sharing its line with markup applies to that
 markup; one sitting on its own line applies to the line below it:
 
 ```xml
-<label>SiLVO</label> <!-- kdk-ignore: labels -->
+<label>SiLVO</label> <!-- kdk-ignore: labels; theme name -->
 
-<!-- kdk-ignore: labels -->
+<!-- kdk-ignore: labels; theme name -->
 <label>Superman</label>
 ```
 
 Category names are the ones in the summary (`Labels`, `Fonts`, `Images`, `IDs`,
-`Variables`, `Includes`, `XML Validation`, `File Integrity`), matched without
-regard to case, spaces, or hyphens.
+`Variables`, `Maps`, `Includes`, `XML Validation`, `File Integrity`, `Kodi Repo`),
+matched without regard to case, spaces, or hyphens.
 
-Useful for a debug overlay whose labels are deliberately untranslated:
-
-```xml
-<!-- kdk-ignore-file: labels -->
-```
+A muted finding is not dropped. `--json` keeps it with a `muted` field holding the
+comment's line and reason, and the saved report lists it with the same. The
+terminal list, `--github` annotations and the exit code leave it out, and the
+summary counts it apart.
 
 ## Configuration
 

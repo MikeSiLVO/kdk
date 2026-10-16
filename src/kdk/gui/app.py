@@ -333,6 +333,7 @@ class KdkApp(QMainWindow):
         QMessageBox.critical(self, "Validation error", message)
 
     def _refresh_tree(self):
+        """Fill the tree with the run's unmuted issues under the filter, and its summary line."""
         if not self._result or self._result.get("error"):
             return
 
@@ -348,7 +349,7 @@ class KdkApp(QMainWindow):
         def _real(cat_issues):
             return [
                 i for i in cat_issues
-                if i.get("line", 0) > 0 or "not found" in i.get("message", "").lower()
+                if not i.get("muted") and (i.get("line", 0) > 0 or "not found" in i.get("message", "").lower())
             ]
 
         total_issues = 0
@@ -358,7 +359,7 @@ class KdkApp(QMainWindow):
                 continue
 
             cat_node = QTreeWidgetItem(self.tree, [f"{category} ({len(real_issues)})", "", "", ""])
-            # Span the category title across all columns so the row is one click target.
+            # one click target across the whole row
             cat_node.setFirstColumnSpanned(True)
             for issue in real_issues:
                 full_path = issue.get("file", "")
@@ -377,12 +378,14 @@ class KdkApp(QMainWindow):
         summary = f"{self._result['skin_name']}  |  {total_issues} issues"
         if hide_includes and hidden > 0:
             summary += f"  ({hidden} include-warning{'s' if hidden != 1 else ''} hidden)"
+        muted = sum(1 for rows in issues.values() for i in rows if i.get("muted"))
+        if muted:
+            summary += f"  ({muted} muted)"
         summary += f"  |  {self._result['duration']:.1f}s"
         self.summary_label.setText(summary)
 
     def _on_tree_double_clicked(self, item: QTreeWidgetItem, _col: int):
-        """Issue row -> open file in editor. Category rows are left alone - Qt's
-        default double-click handler already toggles expansion."""
+        """Open an issue row's file in the editor; a category row is left to expand or collapse."""
         if item.childCount():
             return
 

@@ -15,15 +15,21 @@ PATH_KEYS = ("file", "include_file", "call_file")
 
 
 def counts(issues):
-    """Error and warning totals across a `{category: [issue]}` map."""
+    """Error, warning and muted totals across a `{category: [issue]}` map."""
     flat = [i for rows in issues.values() for i in rows]
     return severity_counts(flat)
 
 
 def severity_counts(rows):
-    """Error and warning totals for one flat list of issues."""
-    by_severity = Counter(i.get("severity") for i in rows)
-    return by_severity[SEVERITY_ERROR], by_severity[SEVERITY_WARNING]
+    """Error, warning and muted totals for a flat list of issues; muted ones count only as muted."""
+    by_severity = Counter("muted" if i.get("muted") else i.get("severity") for i in rows)
+    return by_severity[SEVERITY_ERROR], by_severity[SEVERITY_WARNING], by_severity["muted"]
+
+
+def unmuted(issues):
+    """The `{category: [issue]}` map without muted issues or empty categories."""
+    kept = {category: [i for i in rows if not i.get("muted")] for category, rows in issues.items()}
+    return {category: rows for category, rows in kept.items() if rows}
 
 
 def relative(path, root):
@@ -51,8 +57,8 @@ def render_error(message):
 
 
 def render_json(result, issues):
-    """Machine-readable payload mirroring what the terminal shows, with versions and notices."""
-    total_errors, total_warnings = counts(issues)
+    """Machine-readable payload of the run's issues, muted ones too, with versions and notices."""
+    total_errors, total_warnings, total_muted = counts(issues)
     return {
         "format_version": FORMAT_VERSION,
         "kdk_version": __version__,
@@ -64,5 +70,6 @@ def render_json(result, issues):
         "duration_seconds": round(result["duration"], 2),
         "errors": total_errors,
         "warnings": total_warnings,
+        "muted": total_muted,
         "categories": {c: _rows(rows, result["skin_path"]) for c, rows in issues.items() if rows},
     }
