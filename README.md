@@ -139,6 +139,9 @@ to anyone reading the results:
 <!-- kdk-ignore -->                                one line, every check
 ```
 
+A file-wide comment needs both the checks it covers and a reason. If either is
+missing, it mutes nothing and is reported as a warning.
+
 Both placements work. A directive sharing its line with markup applies to that
 markup; one sitting on its own line applies to the line below it:
 
@@ -151,7 +154,8 @@ markup; one sitting on its own line applies to the line below it:
 
 Category names are the ones in the summary (`Labels`, `Fonts`, `Images`, `IDs`,
 `Variables`, `Maps`, `Includes`, `XML Validation`, `File Integrity`, `Kodi Repo`),
-matched without regard to case, spaces, or hyphens.
+matched without regard to case, spaces, or hyphens. A name that matches no check
+is reported as a warning.
 
 A muted finding is not dropped. `--json` keeps it with a `muted` field holding the
 comment's line and reason, and the saved report lists it with the same. The
