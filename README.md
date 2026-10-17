@@ -2,50 +2,51 @@
 
 Standalone Kodi skin validation tool. CLI and GUI.
 
-Originally extracted from the [KodiDevKit](https://github.com/MikeSiLVO/KodiDevKit) Sublime Text plugin to run as a self-contained app.
+It runs the checks of the [KodiDevKit](https://github.com/MikeSiLVO/KodiDevKit) Sublime Text plugin,
+and its [validation guide](https://github.com/MikeSiLVO/KodiDevKit/blob/main/docs/validation.md)
+lists what each one reports.
 
 ## Install
 
-### Pre-built binaries (recommended)
+### Pre-built binaries
 
 Each release ships two binaries per OS: a CLI build and a GUI build. Both
-contain the same code; the GUI build just runs without a console window so
-double-clicking doesn't pop a terminal.
+contain the same code; the GUI build runs without a console window, so
+double-clicking it doesn't open a terminal. No Python install needed.
 
-Download the latest from the [Releases page](https://github.com/MikeSiLVO/kdk/releases):
+Download them from the [Releases page](https://github.com/MikeSiLVO/kdk/releases).
+`<version>` is the release tag, such as `v2.0.0`:
 
-Filenames follow `kdk-<cli|gui>-<version>-<os>-<arch>` (e.g. `kdk-gui-v0.1.0-windows-x86_64.exe`).
+- **Windows (x86_64)**: `kdk-gui-<version>-windows-x86_64.exe` and
+  `kdk-cli-<version>-windows-x86_64.exe`.
+- **macOS (Apple Silicon)**: `kdk-gui-<version>-macos-arm64.zip` and
+  `kdk-cli-<version>-macos-arm64.zip`. The binaries are not notarized, so macOS
+  blocks the first launch; allow it with Open Anyway under System Settings >
+  Privacy & Security.
+- **Linux (x86_64)**: `kdk-gui-<version>-linux-x86_64.tar.gz` and
+  `kdk-cli-<version>-linux-x86_64.tar.gz`. Extract with `tar -xzf`, then run the
+  file inside.
 
-- **Windows (x86_64)**:
-  - `kdk-gui-<version>-windows-x86_64.exe`: double-click to launch the GUI.
-  - `kdk-cli-<version>-windows-x86_64.exe`: for terminal use.
-- **macOS (Apple Silicon)**:
-  - `kdk-gui-<version>-macos-arm64.zip`: unzip, right-click then Open the first time (unsigned binary).
-  - `kdk-cli-<version>-macos-arm64.zip`: CLI build for terminal use.
-- **Linux (x86_64)**:
-  - `kdk-gui-<version>-linux-x86_64.tar.gz`: `tar -xzf kdk-gui-*.tar.gz && ./kdk-gui-*`.
-  - `kdk-cli-<version>-linux-x86_64.tar.gz`: CLI build (`tar -xzf` then run).
+### From PyPI
 
-No Python install needed.
+```bash
+pip install kdk            # CLI
+pip install "kdk[gui]"     # CLI and GUI
+```
+
+Requires Python 3.10+. The CLI needs only `lxml` and `rich`; the GUI adds PySide6.
+
+On Linux the GUI needs a few system libraries that most desktop installs
+already have. On Debian and Ubuntu they are `libegl1`, `libxkbcommon0`,
+`libdbus-1-3` and `libxcb-cursor0`.
 
 ### From source
 
 ```bash
 git clone https://github.com/MikeSiLVO/kdk.git
 cd kdk
-pip install -e .
+pip install -e .           # or -e ".[gui]" for the GUI
 ```
-
-Requires Python 3.10+. The CLI needs only `lxml` and `rich`.
-
-The GUI is an extra, so a plain install leaves it out:
-
-```bash
-pip install -e ".[gui]"
-```
-
-On Linux the GUI may need a few X/wayland system packages (`libxkbcommon`,
-`libgl1`) which most desktop installs already have.
 
 ### Building a local binary
 
@@ -53,17 +54,13 @@ On Linux the GUI may need a few X/wayland system packages (`libxkbcommon`,
 python make_binaries.py
 ```
 
-`make_binaries.py` will install any missing build-time deps (PyInstaller + kdk's
-runtime deps) on first run. End users of the resulting `.exe` need nothing
-installed.
+It installs PyInstaller and the GUI dependencies on first run, then writes two
+binaries to `dist/`:
 
-Produces two binaries in `dist/`:
+- `kdk` (or `kdk.exe`): the CLI build.
+- `kdk-gui` (or `kdk-gui.exe`): the GUI build.
 
-- `kdk` (or `kdk.exe`): console build for CLI use.
-- `kdk-gui` (or `kdk-gui.exe`): windowed build that launches the GUI without a
-  console flash on double-click.
-
-Same args as CI, so a local build that works should match the released artifact.
+The release binaries are built with the same script.
 
 ## Usage
 
@@ -73,28 +70,36 @@ kdk validate                   # Validate the current directory
 kdk validate /path/to/skin     # Summary, then pick a category to read
 kdk validate --list            # Print every issue instead of the picker
 kdk validate --quiet           # Summary only
+kdk validate --report          # Also save a text report in Downloads
+kdk validate -o report.txt     # Save the text report to this path
 ```
 
 On a terminal `validate` ends with a category picker. Redirected or piped it
-prints every issue instead, so CI logs are complete.
+prints every issue instead, so CI logs are complete. The summary names the Kodi
+release checked and anything that weakened the run, such as a `kodi_path`
+without Kodi's data in it.
 
-Results are cached per skin, so you can read a finished run without paying for
-another one:
+`kdk issues` shows the last run's findings again without validating:
 
 ```bash
 kdk issues                     # Every issue from the last run
 kdk issues --browse            # Pick a category
-kdk issues --category fonts    # One category
-kdk issues --severity error    # Errors only
+kdk issues --summary           # Append the per-category summary
 ```
 
-Both commands take `--json` for machine-readable output, `--output` to write to
-a file, and `--show-include-warnings` to stop filtering warnings that originate
-inside include content.
+Both commands take these:
 
-`validate --release omega` or `--release piers` checks against that Kodi release
-instead of the one the `xbmc.gui` version in addon.xml gives, and reports a skin
-that release will not load.
+- `--severity error` or `--severity warning`: that severity only.
+- `--category <text>`: categories whose name contains the text, such as `fonts`.
+- `--show-include-warnings`: also list warnings from include content, hidden by
+  default. Errors from include content are always listed.
+- `--json`: machine-readable output. With `validate -o` it goes to that file.
+- `--strict`, `--exit-zero` and `--github`, described below.
+- `--debug`: engine logging on stderr.
+
+`validate` also takes `--kodi-path`, `--release` and `--language`, which override
+the `kodi_path`, `kodi_release` and `language` [settings](#configuration), and
+`--isolated`.
 
 Exit code is `1` if any errors are found, `2` when kdk could not finish the run,
 and `0` otherwise. Add `--strict` to fail on warnings too:
@@ -109,9 +114,8 @@ kdk failed. With `--json`, a failed run prints `format_version`, `kdk_version` a
 
 ## GitHub Actions
 
-`--github` additionally prints each issue as a workflow command, so it shows up
-as an inline annotation on the commit and on the pull request diff instead of
-being buried in the log:
+`--github` also prints each issue as a workflow command, so it shows up as an
+inline annotation on the commit and on the pull request diff:
 
 ```yaml
       - run: pip install kdk
@@ -121,16 +125,15 @@ being buried in the log:
 Annotation paths are relative to `GITHUB_WORKSPACE`, so a skin in a subdirectory
 still points at the right file.
 
-Run it on `ubuntu-latest`. A case-sensitive filesystem is the point: a reference
-whose case doesn't match the file on disk works on Windows and macOS and fails on
-Linux and Android, so a Windows-only check cannot find that class of bug.
+Run it on `ubuntu-latest`. Windows runners check text files out with CRLF line
+endings, which File Integrity reports as errors.
 
 ## Silencing a finding
 
 An XML comment mutes findings the skin has already judged, the way a
-`# type: ignore` does in Python. Put it at the top of a file to cover the whole
-file, or on a line to cover just that line. Text after a `;` is the reason, shown
-to anyone reading the results:
+`# type: ignore` does in Python. `kdk-ignore-file` covers the whole file it sits
+in and `kdk-ignore` a single line. Text after a `;` is the reason, shown to
+anyone reading the results:
 
 ```xml
 <!-- kdk-ignore-file: labels; debug overlay -->   whole file, Labels only
@@ -142,8 +145,8 @@ to anyone reading the results:
 A file-wide comment needs both the checks it covers and a reason. If either is
 missing, it mutes nothing and is reported as a warning.
 
-Both placements work. A directive sharing its line with markup applies to that
-markup; one sitting on its own line applies to the line below it:
+A one-line comment sharing its line with markup applies to that line; one
+sitting on its own line applies to the line below it:
 
 ```xml
 <label>SiLVO</label> <!-- kdk-ignore: labels; theme name -->
@@ -152,10 +155,14 @@ markup; one sitting on its own line applies to the line below it:
 <label>Superman</label>
 ```
 
+Comments are read in the XML files of the skin's resolution folders, such as
+`xml` or `1080i`. A finding in any other file, `addon.xml` and the language
+files included, cannot be muted.
+
 Category names are the ones in the summary (`Labels`, `Fonts`, `Images`, `IDs`,
 `Variables`, `Maps`, `Includes`, `XML Validation`, `File Integrity`, `Kodi Repo`),
 matched without regard to case, spaces, or hyphens. A name that matches no check
-is reported as a warning.
+is reported as a warning; the names it got right still apply.
 
 A muted finding is not dropped. `--json` keeps it with a `muted` field holding the
 comment's line and reason, and the saved report lists it with the same. The
@@ -175,17 +182,24 @@ Settings are loaded in priority order:
 4. Built-in defaults
 
 `--isolated` skips both config files, so only CLI flags and the defaults apply.
+The GUI saves its Kodi path and editor choice to the user config.
 
 Example config file:
 
 ```json
 {
-    "language": "resource.language.en_gb",
+    "kodi_path": "/usr/share/kodi",
     "editor": "code"
 }
 ```
 
-- `editor`: which editor opens when you double-click an issue in the GUI. Supported: `code`, `sublime`, `notepad++`, `vim`, `nano`, `kate`, `gedit`, or `""` for OS default.
+| Setting | Default | Effect |
+|---------|---------|--------|
+| `kodi_path` | `""` | Kodi installation folder. Kodi's core colors and label ids are read from it, and font files the skin does not ship are looked for in it. Empty, or a folder without Kodi's `colors.xml` and `strings.po`, uses the copies bundled for the release checked. A folder that does not exist is reported as an error. |
+| `kodi_release` | `""` | Release to check against: `omega` (Kodi 21) or `piers` (Kodi 22). Empty uses the release the skin's `xbmc.gui` import names, or the newest when it names none. A forced release that will not load the skin is reported. An unknown value is reported and ignored. |
+| `language` | `"resource.language.en_gb"` | Language of the skin's `strings.po` that label ids are looked up in, as the folder name or its code (`en_gb`). |
+| `validation_exclude` | `["shortcuts"]` | Folder or file names XML Validation skips, matched against any part of the path. |
+| `editor` | `""` | Editor a double-click in the GUI opens the issue in: `code`, `sublime`, `notepad++`, `vim`, `nano`, `kate` or `gedit`. Empty opens the file in the system's default app, without going to the line. |
 
 ## License
 
