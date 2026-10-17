@@ -3,7 +3,7 @@
 	<defaultcontrol always="true">9000</defaultcontrol>
 	<controls>
 		<control type="group" id="9000">
-			<control type="label">
+			<control type="button">
 				<description>Hello</description>
 				<posx>50</posx>
 				<posy>50</posy>

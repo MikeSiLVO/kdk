@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <fonts>
-	<fontset id="Default" idloc="31390" unicode="true">
+	<fontset id="Default">
 		<font>
 			<name>font13</name>
 			<filename>NotoSans-Regular.ttf</filename>
