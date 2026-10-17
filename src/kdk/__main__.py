@@ -33,13 +33,8 @@ class Parser(argparse.ArgumentParser):
         sys.exit(fail(message, True))
 
 
-def real_issues(issues):
-    """Drop the sentinel rows checks return when clean: no severity and no source line."""
-    return [i for i in issues if i.get("severity") or (i.get("line") or 0) > 0]
-
-
 def visible_issues(raw, args):
-    """Apply the include filter, sentinel filter, and any --severity/--category narrowing."""
+    """Apply the include filter and any --severity/--category narrowing."""
     from kdk.core import filter_include_warnings
 
     issues = raw if args.show_include_warnings else filter_include_warnings(raw)
@@ -49,7 +44,6 @@ def visible_issues(raw, args):
     for category, rows in issues.items():
         if wanted and wanted not in category.lower():
             continue
-        rows = real_issues(rows)
         if args.severity:
             rows = [i for i in rows if i.get("severity") == args.severity]
         if rows:

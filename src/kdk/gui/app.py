@@ -346,22 +346,19 @@ class KdkApp(QMainWindow):
         self.tree.clear()
         self._issue_data.clear()
 
-        def _real(cat_issues):
-            return [
-                i for i in cat_issues
-                if not i.get("muted") and (i.get("line", 0) > 0 or "not found" in i.get("message", "").lower())
-            ]
+        def _unmuted(cat_issues):
+            return [i for i in cat_issues if not i.get("muted")]
 
         total_issues = 0
         for category, cat_issues in issues.items():
-            real_issues = _real(cat_issues)
-            if not real_issues:
+            shown = _unmuted(cat_issues)
+            if not shown:
                 continue
 
-            cat_node = QTreeWidgetItem(self.tree, [f"{category} ({len(real_issues)})", "", "", ""])
+            cat_node = QTreeWidgetItem(self.tree, [f"{category} ({len(shown)})", "", "", ""])
             # one click target across the whole row
             cat_node.setFirstColumnSpanned(True)
-            for issue in real_issues:
+            for issue in shown:
                 full_path = issue.get("file", "")
                 display_name = os.path.basename(full_path) if full_path else ""
                 line_num = issue.get("line", 0)
@@ -373,7 +370,7 @@ class KdkApp(QMainWindow):
                     self._issue_data[child] = {"file": full_path, "line": line_num}
                 total_issues += 1
 
-        unfiltered_total = sum(len(_real(c)) for c in all_issues.values())
+        unfiltered_total = sum(len(_unmuted(c)) for c in all_issues.values())
         hidden = unfiltered_total - total_issues
         summary = f"{self._result['skin_name']}  |  {total_issues} issues"
         if hide_includes and hidden > 0:
