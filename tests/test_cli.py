@@ -61,6 +61,14 @@ def test_release_flag_picks_the_release_checked(tmp_path):
     assert run("validate", "--json", "--release", "nexus", str(SKIN)) == 2
 
 
+def test_summary_names_the_release_and_every_notice(tmp_path):
+    """The terminal summary says which release was checked and what weakened the run."""
+    proc = _process("validate", "--quiet", "--isolated", "--release", "piers", "--kodi-path", str(tmp_path),
+                    str(SKIN))
+    assert "Kodi Piers" in proc.stdout
+    assert f"No system/colors.xml in {tmp_path}, core colors come from the bundled copy" in proc.stdout
+
+
 def test_every_failure_prints_the_error_object_under_json():
     """A bad flag, a missing folder and a crash each print the error object to stdout."""
     crash = "import kdk.core; kdk.core.validate_skin = lambda *a, **k: 1 / 0"

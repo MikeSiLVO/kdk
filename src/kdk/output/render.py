@@ -7,6 +7,7 @@ import sys
 from collections import defaultdict
 
 from rich.console import Console
+from rich.markup import escape
 from rich.padding import Padding
 from rich.table import Table
 from rich.text import Text
@@ -46,10 +47,18 @@ def count_cells(errors, warnings, muted=0):
 
 
 def render_summary(result, issues):
-    """One row per category that has something to say, then the totals line."""
+    """Render the release, notices, a row per category with something to say, and the totals."""
+    release = result.get("kodi_release")
+    checked = f"Kodi {release.capitalize()}  " if release else ""
     console.print()
-    console.print(f"  [bold]{result['skin_name']}[/]  [dim]{result['duration']:.1f}s[/]")
+    console.print(f"  [bold]{result['skin_name']}[/]  [dim]{checked}{result['duration']:.1f}s[/]")
     console.print()
+
+    notices = result.get("notices") or []
+    for notice in notices:
+        console.print(f"  [yellow]{escape(notice)}[/]")
+    if notices:
+        console.print()
 
     table = Table(show_header=False, box=None, pad_edge=False, padding=(0, 1))
     table.add_column("category", style="cyan", no_wrap=True)
