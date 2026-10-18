@@ -89,7 +89,7 @@ def test_rows_lead_with_file_line_rule_and_subject():
 
 
 def test_rules_lists_every_registered_rule_with_its_check():
-    """`kdk rules --json` lists each rule id, the check it belongs to and what it reports."""
+    """`kdk rules --json` lists each rule id, its check, what it reports and its checker level."""
     from kdk.libs.validation.rules import RULES
 
     env = dict(os.environ, PYTHONPATH=str(SRC))
@@ -100,3 +100,5 @@ def test_rules_lists_every_registered_rule_with_its_check():
     assert [r["id"] for r in payload["rules"]] == sorted(RULES)
     assert {r["id"]: r["check"] for r in payload["rules"]}["fonts.undefined"] == "Fonts"
     assert all(r["description"] == RULES[r["id"]] for r in payload["rules"])
+    levels = {r["id"]: r["addon_checker"] for r in payload["rules"]}
+    assert (levels["repo.schema"], levels["repo.file-type"], levels["fonts.undefined"]) == ("problem", "warning", None)

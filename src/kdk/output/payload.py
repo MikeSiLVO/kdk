@@ -56,10 +56,11 @@ def _rows(rows, root):
 
 
 def render_rules():
-    """Payload listing every rule id with the check it belongs to and what it reports."""
-    from kdk.libs.validation.rules import PREFIXES, RULES
+    """Payload listing each rule id with its check, what it reports and its add-on checker level."""
+    from kdk.libs.validation.rules import ADDON_CHECKER, PREFIXES, RULES
 
-    rules = [{"id": rule, "check": PREFIXES[rule.split(".")[0]], "description": text}
+    rules = [{"id": rule, "check": PREFIXES[rule.split(".")[0]], "description": text,
+              "addon_checker": ADDON_CHECKER.get(rule)}
              for rule, text in sorted(RULES.items())]
     return {"format_version": FORMAT_VERSION, "kdk_version": __version__, "rules": rules}
 
