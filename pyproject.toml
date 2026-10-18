@@ -68,7 +68,7 @@ kdk-gui = "kdk.gui.__main__:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-kdk = ["data/**/*"]
+kdk = ["data/**/*", "libs/polib/LICENSE"]
 
 [tool.setuptools.dynamic]
 version = { attr = "kdk.__version__" }
