@@ -15,7 +15,7 @@ contain the same code; the GUI build runs without a console window, so
 double-clicking it doesn't open a terminal. No Python install needed.
 
 Download them from the [Releases page](https://github.com/MikeSiLVO/kdk/releases).
-`<version>` is the release tag, such as `v3.0.0`:
+`<version>` is the release tag, such as `v3.0.1`:
 
 - **Windows (x86_64)**: `kdk-gui-<version>-windows-x86_64.exe` and
   `kdk-cli-<version>-windows-x86_64.exe`.
