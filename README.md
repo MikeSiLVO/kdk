@@ -219,7 +219,7 @@ Example config file:
 
 | Setting | Default | Effect |
 |---------|---------|--------|
-| `kodi_path` | `""` | Kodi installation folder. Kodi's core colors and label ids are read from it, and font files the skin does not ship are looked for in it. Empty, or a folder without Kodi's `colors.xml` and `strings.po`, uses the copies bundled for the release checked. A folder that does not exist is reported as an error. |
+| `kodi_path` | `""` | Kodi installation folder. Kodi's core colors and label ids are read from it, and font files the skin does not ship are looked for in it. Empty, or a folder without Kodi's `colors.xml` and `strings.po`, uses the copies bundled for the release checked. An xbmc source checkout works too, and its info names replace the bundled list; `info_source` in `--json` says which was used. A folder that does not exist is reported as an error. |
 | `kodi_release` | `""` | Release to check against: `omega` (Kodi 21) or `piers` (Kodi 22). Empty uses the release the skin's `xbmc.gui` import names, or the newest when it names none. A forced release that will not load the skin is reported. An unknown value is reported and ignored. |
 | `language` | `"resource.language.en_gb"` | Language of the skin's `strings.po` that label ids are looked up in, as the folder name or its code (`en_gb`). |
 | `validation_exclude` | `["shortcuts"]` | Folder or file names XML Validation skips, matched against any part of the path. |

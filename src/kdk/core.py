@@ -137,7 +137,7 @@ def validate_skin(
         "timestamp": timestamp,
         "duration": duration,
         "kodi_release": provider.addon.api_version,
-        "info_source": "snapshot",
+        "info_source": provider.info_source,
         "notices": list(provider.addon.notices),
         "error": None,
     }
