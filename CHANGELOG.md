@@ -70,6 +70,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A `special://skin/` image path is looked up from the skin folder and a bare one in `media/`, and a wrong path names where Kodi looks for it.
 - The GUI lists findings with no line, such as 16-bit PNGs and file-level Kodi repo warnings.
 - The GUI can validate again after a run finishes.
+- A strings.po syntax error says what is wrong with the line, such as a msgstr that follows no msgid.
 - Definitions in a file that a window's include call names count for every check.
 
 ## [2.0.0] - 2026-08-03
