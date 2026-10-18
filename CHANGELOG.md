@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [3.0.0] - 2026-10-18
 
 ### Added
 
@@ -47,6 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Label text that is an info Kodi knows, such as `Player.Title`, is reported as a missing `$INFO[]` wrapper.
 - BOM and line ending findings say the Kodi repo's review rejects them, and leave the file name to the file field.
 - `allowoverlay`, `<system>` in `<coordinates>`, and `borderpercent` are reported as tags Kodi does not read.
+- Names only Kodi 23 adds are reported as unknown under Piers.
 
 ### Removed
 
