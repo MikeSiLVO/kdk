@@ -61,6 +61,8 @@ jobs:
         run: |
           ./dist/kdk${{ matrix.artifact_ext }} --help
           ./dist/kdk${{ matrix.artifact_ext }} validate tests/fixtures/clean_skin
+          ./dist/kdk${{ matrix.artifact_ext }} validate --json --isolated --exit-zero tests/fixtures/clean_skin > smoke.json
+          python -c "import json, sys; n = json.load(open('smoke.json'))['notices']; sys.exit(f'notices: {n}' if n else 0)"
 
       - name: Rename binaries
         shell: bash
@@ -127,6 +129,7 @@ jobs:
           python -m venv wheel-env
           wheel-env/bin/pip install "$GITHUB_WORKSPACE"/dist/*.whl
           wheel-env/bin/kdk validate --json --isolated --exit-zero -o clean.json "$FIXTURES/clean_skin"
+          python -c "import json, sys; n = json.load(open('clean.json'))['notices']; sys.exit(f'notices: {n}' if n else 0)"
           wheel-env/bin/kdk compare --json --isolated --exit-zero clean.json "$FIXTURES/dirty_skin" > compare.json
           wheel-env/bin/kdk rules --json > rules.json
       - uses: actions/upload-artifact@v7
