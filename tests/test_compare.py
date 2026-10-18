@@ -60,11 +60,12 @@ def test_muting_on_head_shows_with_its_reason_and_never_counts_as_new():
 
 
 def test_one_finding_across_language_files_folds_into_one_row():
-    """The same string id duplicated in every strings.po is one row with the count and files."""
+    """One string id duplicated in every strings.po is one row with its count, files and lines."""
     files = [f"language/resource.language.{code}/strings.po" for code in ("de_de", "en_gb", "fr_fr")]
-    payload = compare(None, run([row(5, "31000", rule="repo.po-duplicate-id", file=f) for f in files]))
+    payload = compare(None, run([row(5 + i, "31000", rule="repo.po-duplicate-id", file=f) for i, f in enumerate(files)]))
     assert len(payload["rows"]) == 1
-    assert (payload["rows"][0]["count"], payload["rows"][0]["files"], payload["new"]) == (3, files, 3)
+    folded = payload["rows"][0]
+    assert (folded["count"], folded["files"], folded["lines"], payload["new"]) == (3, files, [5, 6, 7], 3)
 
 
 def test_no_base_makes_everything_new():

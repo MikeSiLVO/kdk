@@ -128,9 +128,9 @@ kdk compare --json -o diff.json base.json new/skin.test
 ```
 
 Findings match on rule, file and subject, so one that only moves lines is neither new nor fixed.
-A finding repeated across language files is one row, with `count` and `files`. A finding muted on
-head that is new, or was not muted on base, is listed as `muted` with the comment's reason, and
-never counts as new.
+A finding repeated across language files is one row, with `count`, `files` and the `lines` that
+go with them. A finding muted on head that is new, or was not muted on base, is listed as `muted`
+with the comment's reason, and never counts as new.
 
 Exit code is `1` when head adds a finding, `2` when kdk could not finish, and `0` otherwise;
 `--exit-zero` gives `0` for any finished run. Runs from different kdk versions or Kodi releases

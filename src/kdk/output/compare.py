@@ -64,7 +64,7 @@ def _row(row, status, **extra):
 
 
 def _fold(rows):
-    """Fold a finding repeated across language files into one row, with the count and the files."""
+    """Fold a finding repeated across language files into one row with count, files and lines."""
     groups, out = {}, []
     for row in rows:
         if _LANGUAGE_FILE.search(row.get("file") or ""):
@@ -75,8 +75,9 @@ def _fold(rows):
         if len(group) == 1:
             out.append(group[0])
             continue
-        first = min(group, key=lambda r: (r["file"], r["line"] or 0))
-        out.append({**first, "count": len(group), "files": sorted(r["file"] for r in group)})
+        group.sort(key=lambda r: (r["file"], r["line"] or 0))
+        out.append({**group[0], "count": len(group), "files": [r["file"] for r in group],
+                    "lines": [r["line"] for r in group]})
     return out
 
 
