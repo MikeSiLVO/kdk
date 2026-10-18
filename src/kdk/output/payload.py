@@ -12,6 +12,7 @@ from kdk.libs.validation.constants import SEVERITY_ERROR, SEVERITY_WARNING
 FORMAT_VERSION = 1
 
 PATH_KEYS = ("file", "include_file", "call_file")
+LEAD_KEYS = ("file", "line", "rule", "subject")
 
 
 def counts(issues):
@@ -45,10 +46,22 @@ def relative(path, root):
 
 
 def _rows(rows, root):
-    """Copies of the issues with skin-relative paths, sorted by file, line and message."""
-    out = [{**issue, **{key: relative(issue[key], root) for key in PATH_KEYS if issue.get(key)}}
-           for issue in rows]
-    return sorted(out, key=lambda i: (i.get("file") or "", i.get("line") or 0, i.get("message") or ""))
+    """Issue copies with skin-relative paths, led and sorted by file, line, rule and subject."""
+    out = []
+    for issue in rows:
+        row = {**issue, **{key: relative(issue[key], root) for key in PATH_KEYS if issue.get(key)}}
+        out.append({**{key: row[key] for key in LEAD_KEYS if key in row}, **row})
+    return sorted(out, key=lambda i: (i.get("file") or "", i.get("line") or 0, i.get("rule") or "",
+                                      i.get("subject") or "", i.get("message") or ""))
+
+
+def render_rules():
+    """Payload listing every rule id with the check it belongs to and what it reports."""
+    from kdk.libs.validation.rules import PREFIXES, RULES
+
+    rules = [{"id": rule, "check": PREFIXES[rule.split(".")[0]], "description": text}
+             for rule, text in sorted(RULES.items())]
+    return {"format_version": FORMAT_VERSION, "kdk_version": __version__, "rules": rules}
 
 
 def render_error(message):

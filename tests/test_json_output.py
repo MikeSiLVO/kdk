@@ -62,3 +62,28 @@ def test_paths_are_skin_relative_and_rows_sorted():
     assert [(r["file"], r["line"]) for r in out] == [("16x9/a.xml", 2), ("16x9/a.xml", 9), ("16x9/b.xml", 3)]
     assert (out[1]["include_file"], out[1]["call_file"]) == ("16x9/Includes.xml", "16x9/a.xml")
     assert rows[0]["file"].startswith(root)
+
+
+def test_rows_lead_with_file_line_rule_and_subject():
+    """Each row opens with file, line, rule and subject; a line's rows run by rule."""
+    root = os.path.join(os.sep, "skins", "skin.test")
+    rows = [{"message": "b", "file": os.path.join(root, "a.xml"), "line": 4, "rule": "xml.invalid-tag", "subject": "x"},
+            {"message": "a", "file": os.path.join(root, "a.xml"), "line": 4, "rule": "xml.invalid-attr", "subject": "y"}]
+    result = {"skin_name": "skin.test", "skin_path": root, "timestamp": "", "duration": 0}
+    out = render_json(result, {"XML Validation": rows})["categories"]["XML Validation"]
+    assert [list(r)[:4] for r in out] == [["file", "line", "rule", "subject"]] * 2
+    assert [r["rule"] for r in out] == ["xml.invalid-attr", "xml.invalid-tag"]
+
+
+def test_rules_lists_every_registered_rule_with_its_check():
+    """`kdk rules --json` lists each rule id, the check it belongs to and what it reports."""
+    from kdk.libs.validation.rules import RULES
+
+    env = dict(os.environ, PYTHONPATH=str(SRC))
+    code = "import sys; sys.argv = ['kdk', 'rules', '--json']; from kdk.__main__ import main; sys.exit(main())"
+    proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env, check=False)
+    payload = json.loads(proc.stdout)
+    assert proc.returncode == 0
+    assert [r["id"] for r in payload["rules"]] == sorted(RULES)
+    assert {r["id"]: r["check"] for r in payload["rules"]}["fonts.undefined"] == "Fonts"
+    assert all(r["description"] == RULES[r["id"]] for r in payload["rules"])

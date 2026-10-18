@@ -122,6 +122,7 @@ def validate_skin(
                 all_issues[name] = [{
                     "message": f"Check failed: {e}",
                     "file": "", "line": 0, "severity": SEVERITY_ERROR,
+                    "rule": "kdk.check-failed", "subject": name,
                 }]
         else:
             logger.warning("Check method %s not found", method_name)

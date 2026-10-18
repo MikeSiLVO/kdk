@@ -87,6 +87,10 @@ kdk issues --browse            # Pick a category
 kdk issues --summary           # Append the per-category summary
 ```
 
+Every finding carries a `rule` id, such as `fonts.undefined`, and a `subject`, the name it is
+about, such as the font name or the image path as written. `kdk rules` lists every id with what it
+reports, and `kdk rules --json` adds the check each belongs to. An id never changes once released.
+
 Both commands take these:
 
 - `--severity error` or `--severity warning`: that severity only.

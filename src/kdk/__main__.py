@@ -169,6 +169,25 @@ def cmd_issues(args):
     return exit_code(issues, args)
 
 
+def cmd_rules(args):
+    """Print every rule id with what it reports, as the JSON payload when asked; returns 0."""
+    from kdk.output.payload import render_rules
+
+    payload = render_rules()
+    if args.json:
+        print(json.dumps(payload, indent=2))
+        return 0
+
+    from rich.markup import escape
+
+    from kdk.output.render import console
+
+    width = max(len(rule["id"]) for rule in payload["rules"])
+    for rule in payload["rules"]:
+        console.print(f"  [cyan]{rule['id']:<{width}}[/]  {escape(rule['description'])}")
+    return 0
+
+
 def add_filters(parser):
     """Add the flags shared by `validate` and `issues`."""
     from kdk.libs.validation.constants import SEVERITY_ERROR, SEVERITY_WARNING
@@ -224,6 +243,10 @@ def main():
     p_issues.add_argument("--summary", action="store_true", help="Append the per-category summary")
     add_filters(p_issues)
     p_issues.set_defaults(func=cmd_issues)
+
+    p_rules = subparsers.add_parser("rules", help="List every rule id with what it reports")
+    p_rules.add_argument("--json", action="store_true", help="Output JSON instead of the terminal view")
+    p_rules.set_defaults(func=cmd_rules)
 
     args = parser.parse_args()
 
