@@ -38,10 +38,8 @@ class LoaderMixin:
     _fatal_xml_error: str | None
 
     def load_data(self, kodi_version="omega"):
-        """
-        Load control templates (controls.xml) and builtins/conditions (data.xml).
-        """
-        data_dir = os.path.join(os.path.dirname(__file__), "..", "..", "data", kodi_version)
+        """Load a Kodi version's controls, builtins, conditions, window maps and info names."""
+        data_dir = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "data", kodi_version))
 
         self.template_root = get_root_from_file(
             os.path.join(data_dir, "controls.xml")
@@ -107,7 +105,7 @@ class LoaderMixin:
             }
 
     def init_addon(self, path):
-        """Scan `path` and parse the addon; on first XML parse failure, set `_fatal_xml_error` and stop."""
+        """Initialize the addon, noting Kodi data that fails to load and recording the bad XML."""
         self.addon = None
         self._fatal_xml_error = None
         addon_xml = os.path.join(path, "addon.xml")
@@ -122,6 +120,8 @@ class LoaderMixin:
             self.load_data(kodi_ver)
         except Exception as e:
             logger.warning("Failed to load control schema: %s", e)
+            if self.addon:
+                self.addon.add_notice(f"Kodi's {kodi_ver} data could not be loaded, so checks that need it are incomplete: {e}")
 
         if not self.addon:
             return
@@ -137,9 +137,7 @@ class LoaderMixin:
                 return
 
     def load_settings(self, settings):
-        """
-        Load settings file.
-        """
+        """Load the settings and the Kodi path they name."""
         self.settings = settings
         self.kodi_path = settings.get("kodi_path")
         logger.info("kodi path: %s", self.kodi_path)

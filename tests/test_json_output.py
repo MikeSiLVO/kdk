@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from kdk import __version__
+from kdk.libs.infoprovider.provider import InfoProvider
 from kdk.output.payload import render_json
 
 SRC = Path(__file__).resolve().parent.parent / "src"
@@ -40,6 +41,18 @@ def test_payload_carries_versions_release_and_notices():
     assert payload["kodi_release"] in ("omega", "piers")
     assert payload["info_source"] == "snapshot"
     assert isinstance(payload["notices"], list)
+
+
+
+def test_bundled_data_that_cannot_load_is_a_notice(monkeypatch):
+    """Bundled Kodi data that fails to load leaves a notice on the addon."""
+    def fail(version):
+        raise OSError("gone")
+
+    provider = InfoProvider()
+    monkeypatch.setattr(provider, "load_data", fail)
+    provider.init_addon(str(SKIN))
+    assert any("could not be loaded" in notice for notice in provider.addon.notices)
 
 
 def test_payload_holds_no_absolute_path():
