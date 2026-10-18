@@ -6,8 +6,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to build (e.g. v0.1.0). Creates a draft release."
-        required: true
+        description: "Tag to draft a release for (e.g. v0.1.0). Empty only builds and smoke-tests."
+        required: false
+        default: ""
         type: string
 
 permissions:
@@ -140,6 +141,7 @@ jobs:
   publish:
     name: publish to PyPI
     needs: build-wheel
+    if: github.event_name == 'push' || inputs.tag != ''
     runs-on: ubuntu-latest
     environment: pypi
     # Trusted publishing: PyPI verifies this workflow's OIDC claim, so no token
@@ -158,6 +160,7 @@ jobs:
   release:
     name: publish GitHub Release
     needs: [build, build-wheel]
+    if: github.event_name == 'push' || inputs.tag != ''
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
