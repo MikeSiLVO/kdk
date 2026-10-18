@@ -63,6 +63,18 @@ def exit_code(issues, args):
     return 1 if args.strict and warnings else 0
 
 
+def overrides_from(args):
+    """Settings the --language, --kodi-path and --release flags set, beating both config files."""
+    overrides = {}
+    if args.language:
+        overrides["language"] = args.language
+    if args.kodi_path:
+        overrides["kodi_path"] = args.kodi_path
+    if args.release:
+        overrides["kodi_release"] = args.release
+    return overrides
+
+
 def cmd_validate(args):
     """Validate a skin and cache its run, then show, save or print its issues; returns exit code."""
     from kdk.core import CHECK_SEQUENCE, save_report, validate_skin
@@ -73,13 +85,7 @@ def cmd_validate(args):
     if not os.path.isdir(skin_path):
         return fail(f"{skin_path} is not a directory", args.json)
 
-    overrides = {}
-    if args.language:
-        overrides["language"] = args.language
-    if args.kodi_path:
-        overrides["kodi_path"] = args.kodi_path
-    if args.release:
-        overrides["kodi_release"] = args.release
+    overrides = overrides_from(args)
 
     if args.json or args.quiet:
         result = validate_skin(skin_path, config_overrides=overrides, isolated=args.isolated)
@@ -169,6 +175,64 @@ def cmd_issues(args):
     return exit_code(issues, args)
 
 
+def compare_side(path, args):
+    """Payload and error for one side: a saved `validate --json` run, or the skin validated now."""
+    from kdk.core import validate_skin
+    from kdk.output.payload import render_json
+
+    path = os.path.abspath(path)
+    if os.path.isfile(path):
+        try:
+            with open(path, encoding="utf-8") as f:
+                run = json.load(f)
+        except (OSError, ValueError) as e:
+            return None, f"{path} is not a saved kdk run: {e}"
+        if not isinstance(run, dict) or "categories" not in run:
+            return None, f"{path} is not a saved kdk run"
+        return run, None
+    if not os.path.isdir(path):
+        return None, f"{path} is neither a skin folder nor a saved run"
+    result = validate_skin(path, config_overrides=overrides_from(args), isolated=args.isolated)
+    if result["error"]:
+        return None, result["error"]
+    return render_json(result, visible_issues(result["issues"], args)), None
+
+
+def cmd_compare(args):
+    """Compare head with base, or none for a new skin; returns 1 on a new finding, 0 when asked."""
+    from kdk.output.compare import compare, mismatch
+
+    if len(args.paths) > 2:
+        return fail("compare takes a head, or a base and a head", args.json)
+    base_path, head_path = (None, args.paths[0]) if len(args.paths) == 1 else args.paths
+
+    head, error = compare_side(head_path, args)
+    if error:
+        return fail(error, args.json)
+    base = None
+    if base_path:
+        base, error = compare_side(base_path, args)
+        if error:
+            return fail(error, args.json)
+        error = mismatch(base, head)
+        if error:
+            return fail(error, args.json)
+
+    payload = compare(base, head)
+    if args.json:
+        text = json.dumps(payload, indent=2)
+        if args.output:
+            with open(args.output, "w", encoding="utf-8") as f:
+                f.write(text + "\n")
+            print(f"Written: {args.output}", file=sys.stderr)
+        else:
+            print(text)
+    else:
+        from kdk.output.render import render_compare
+        render_compare(payload)
+    return 0 if args.exit_zero or not payload["new"] else 1
+
+
 def cmd_rules(args):
     """Print every rule id with what it reports, as the JSON payload when asked; returns 0."""
     from kdk.output.payload import render_rules
@@ -243,6 +307,25 @@ def main():
     p_issues.add_argument("--summary", action="store_true", help="Append the per-category summary")
     add_filters(p_issues)
     p_issues.set_defaults(func=cmd_issues)
+
+    p_compare = subparsers.add_parser("compare", help="Show what a head run adds, mutes or fixes against a base")
+    p_compare.add_argument("--debug", action="store_true", default=argparse.SUPPRESS,
+                           help="Enable debug logging")
+    p_compare.add_argument("paths", nargs="+", metavar="path",
+                           help="Base and head, or only head for a new skin; each a skin folder or a saved run")
+    p_compare.add_argument("--output", "-o", help="Write the JSON to this path")
+    p_compare.add_argument("--language", help="Language code (e.g. resource.language.en_gb)")
+    p_compare.add_argument("--kodi-path", help="Path to Kodi installation")
+    p_compare.add_argument("--release", choices=[r["name"] for r in Addon.RELEASES],
+                           help="Kodi release to check against, instead of the one addon.xml gives")
+    p_compare.add_argument("--isolated", action="store_true",
+                           help="Ignore the user config and the skin's .kdk.json")
+    p_compare.add_argument("--show-include-warnings", action="store_true",
+                           help="Include warnings that come from include content (hidden by default)")
+    p_compare.add_argument("--exit-zero", action="store_true",
+                           help="Exit 0 whenever the run finishes, new findings or not; 2 still means kdk failed")
+    p_compare.add_argument("--json", action="store_true", help="Output JSON instead of the terminal view")
+    p_compare.set_defaults(func=cmd_compare, severity=None, category=None)
 
     p_rules = subparsers.add_parser("rules", help="List every rule id with what it reports")
     p_rules.add_argument("--json", action="store_true", help="Output JSON instead of the terminal view")

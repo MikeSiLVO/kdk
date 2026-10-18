@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The summary names the Kodi release checked and anything that weakened the run, such as a `kodi_path` without Kodi's data in it.
 - `--json` carries `format_version`, `kdk_version`, `kodi_release`, `info_source`, `notices` and a `muted` count, with paths relative to the skin.
 - Every finding carries a stable `rule` id and a `subject`, the name it is about. `kdk rules` lists the ids with what each reports.
+- `kdk compare` lists the findings a head run adds, mutes or fixes against a base, each side a skin folder or a saved run.
 - A `kdk-ignore` comment takes a reason after `;`. Muted findings stay in `--json` and the saved report, marked with the comment's line and reason, and the summary counts them apart.
 - A Kodi Repo check of `addon.xml`, artwork and language files against the Kodi repo's add-on checker rules, as warnings labeled "Kodi repo".
 - File Integrity reports files Kodi repo review rejects, file names that clash on case-insensitive systems, 16-bit PNGs, and a BOM in any text file.

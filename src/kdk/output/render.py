@@ -120,6 +120,27 @@ def render_issues(issues, skin_path, *, show_category=True):
         console.print()
 
 
+def render_compare(payload):
+    """Render the new, muted and fixed findings by status, then the totals line."""
+    console.print()
+    for status in ("new", "muted", "fixed"):
+        rows = [row for row in payload["rows"] if row["status"] == status]
+        if not rows:
+            continue
+        console.print(f"  [bold]{status}[/]")
+        for row in rows:
+            line = Text("    ")
+            line.append(f"{row['file'] or '(no file)'}:{row['line'] or 0}", style="dim")
+            line.append(f"  {row['rule']}", style="cyan")
+            line.append(f"  {row['message']}")
+            if row.get("count"):
+                line.append(f"  (x{row['count']})", style="dim")
+            console.print(line)
+        console.print()
+    console.print(f"  {payload['new']} new, {payload['muted']} muted, {payload['fixed']} fixed")
+    console.print()
+
+
 def _escape(text, *, prop=False):
     """Escape for a workflow command; property values also swallow `,` and `:`."""
     out = str(text).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
