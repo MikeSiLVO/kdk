@@ -119,6 +119,16 @@ jobs:
           python-version: "3.12"
       - run: pip install build
       - run: python -m build
+      - name: Smoke-test the wheel in a clean venv
+        working-directory: ${{ runner.temp }}
+        env:
+          FIXTURES: ${{ github.workspace }}/tests/fixtures
+        run: |
+          python -m venv wheel-env
+          wheel-env/bin/pip install "$GITHUB_WORKSPACE"/dist/*.whl
+          wheel-env/bin/kdk validate --json --isolated --exit-zero -o clean.json "$FIXTURES/clean_skin"
+          wheel-env/bin/kdk compare --json --isolated --exit-zero clean.json "$FIXTURES/dirty_skin" > compare.json
+          wheel-env/bin/kdk rules --json > rules.json
       - uses: actions/upload-artifact@v7
         with:
           name: wheel-sdist
