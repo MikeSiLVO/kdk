@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 2026-10-18
+
+### Changed
+
+- A folded `kdk compare` row lists each file's line in `lines`, in the order of `files`.
+- A strings.po or XML parse finding names its fault in `subject`, and `kdk compare` keeps different faults apart.
+- A case mismatch on a `special://skin/` image path is an error, `images.unbundled-case-mismatch`, since Kodi loads that image from disk, where case matters.
+- A `special://skin/media/` image path is an error, `images.special-skin-media`: the Kodi repo packs `media/` into `Textures.xbt`, so a repo install has no file there.
+- `ids.use-name` is a warning: a Kodi window referred to by number works, and the message says its name is preferred.
+
+### Fixed
+
+- Images are checked in every tag Kodi reads as a texture, such as `<texturefocus>`, `<midtexture>` and `<texturesliderbar>`, not only in `<texture>`, `<icon>`, `<thumb>` and `<bordertexture>`.
+- A known info label as a color, such as `colordiffuse="Skin.String(name)"`, is not reported as invalid.
+- A slider `<action>`, a spincontrol `<subtype>` and the `align` and `aligny` attributes of `<aspectratio>` are accepted in any case.
+
 ## [3.0.1] - 2026-10-18
 
 ### Fixed
