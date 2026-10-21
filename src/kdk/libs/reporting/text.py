@@ -76,20 +76,18 @@ def generate_text_report(all_issues, skin_name, skin_path, output_path=None):
             if skin_path and file_path.startswith(skin_path):
                 rel_path = os.path.relpath(file_path, skin_path)
 
-            lines.append(f"  {rel_path}")
+            lines.append(f"  {rel_path}{_muted_count(file_issues)}")
 
+            by_mute = {}
             for issue in sorted(file_issues, key=lambda i: i.get("line", 0)):
-                line_num = issue.get("line", 0)
-                message = issue.get("message", "")
-                sev = issue.get("severity", "warning")
-                marker = "E" if sev == SEVERITY_ERROR else "W"
-
-                inc_name = issue.get("include_name", "")
-                inc_suffix = f"  (from include: {inc_name})" if inc_name else ""
-
-                lines.append(f"    {marker} L{line_num:<5d} {message}{inc_suffix}")
-                if issue.get("muted"):
-                    lines.append(f"             {muted_note(issue)}")
+                mute = issue.get("muted")
+                if mute:
+                    by_mute.setdefault((mute["line"], mute.get("reason") or ""), []).append(issue)
+                else:
+                    lines.append(f"    {_row(issue)}")
+            for key in sorted(by_mute):
+                lines.append(f"    {muted_note(by_mute[key][0])}")
+                lines.extend(f"      {_row(issue)}" for issue in by_mute[key])
 
             lines.append("")
 
@@ -104,3 +102,22 @@ def generate_text_report(all_issues, skin_name, skin_path, output_path=None):
             f.write(text)
 
     return text, output_path
+
+
+def _row(issue):
+    """One issue as its severity, line and message, plus the include it came from."""
+    label = issue.get("severity", SEVERITY_WARNING).upper()
+    inc_name = issue.get("include_name", "")
+    inc_suffix = f"  (from include: {inc_name})" if inc_name else ""
+    return f"{label:<8s} line {issue.get('line', 0):<5d} {issue.get('message', '')}{inc_suffix}"
+
+
+def _muted_count(issues):
+    """Heading note counting a file's muted issues per severity; empty when none are muted."""
+    muted = [issue.get("severity", SEVERITY_WARNING) for issue in issues if issue.get("muted")]
+    parts = []
+    for sev in (SEVERITY_ERROR, SEVERITY_WARNING):
+        count = muted.count(sev)
+        if count:
+            parts.append(f"{count} muted {sev}{'s' if count != 1 else ''}")
+    return f"  ({', '.join(parts)})" if parts else ""

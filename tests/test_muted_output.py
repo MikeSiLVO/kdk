@@ -77,7 +77,7 @@ def test_count_cells_puts_muted_last():
 
 
 def test_saved_report_notes_a_muted_issue(tmp_path):
-    """The text report lists the muted issue with its note and counts it apart."""
+    """The text report lists the muted issue under its note and counts it apart."""
     skin = str(tmp_path / "skin.test")
     issue = {"file": os.path.join(skin, "16x9", "Home.xml"), "line": 4, "message": "Label not translated",
              "severity": "warning", "muted": {"line": 4, "reason": "debug overlay"}}
@@ -86,5 +86,7 @@ def test_saved_report_notes_a_muted_issue(tmp_path):
     with open(save_report(result, str(tmp_path / "report.txt")), encoding="utf-8") as f:
         text = f.read()
 
-    assert "Muted by kdk-ignore at line 4: debug overlay" in text
+    assert (f"  {os.path.join('16x9', 'Home.xml')}  (1 muted warning)\n"
+            "    Muted by kdk-ignore at line 4: debug overlay\n"
+            "      WARNING  line 4     Label not translated\n") in text
     assert "Total:     0 errors, 0 warnings, 1 muted" in text
