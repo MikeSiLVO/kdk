@@ -91,9 +91,10 @@ Every finding carries a `rule` id, such as `fonts.undefined`, and a `subject`, t
 about, such as the font name or the image path as written. `kdk rules` lists every id with what it
 reports, and `kdk rules --json` adds the check each belongs to and `addon_checker`: `problem` when
 Kodi's add-on checker fails a repo PR on it, `warning` when it only warns, `null` when it does not
-check it. `blocks_submission` is `true` for every add-on checker problem and for the rules Kodi repo
-reviewers refuse a skin on. Kodi Repo findings stay warnings in kdk. An id never changes once
-released.
+check it. `blocking_warning` is `true` for a rule kdk reports as a warning that still blocks a
+Kodi repo submission: the add-on checker's problems and the rules reviewers refuse a skin on. Errors
+are not marked; every error blocks a submission. Kodi Repo findings stay warnings in kdk. An id
+never changes once released.
 
 Both commands take these:
 
