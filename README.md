@@ -91,7 +91,9 @@ Every finding carries a `rule` id, such as `fonts.undefined`, and a `subject`, t
 about, such as the font name or the image path as written. `kdk rules` lists every id with what it
 reports, and `kdk rules --json` adds the check each belongs to and `addon_checker`: `problem` when
 Kodi's add-on checker fails a repo PR on it, `warning` when it only warns, `null` when it does not
-check it. Kodi Repo findings stay warnings in kdk. An id never changes once released.
+check it. `blocks_submission` is `true` for every add-on checker problem and for the rules Kodi repo
+reviewers refuse a skin on. Kodi Repo findings stay warnings in kdk. An id never changes once
+released.
 
 Both commands take these:
 
@@ -156,7 +158,7 @@ endings, which File Integrity reports as errors.
 
 ## Silencing a finding
 
-An XML comment mutes findings the skin has already judged, the way a
+An XML comment mutes warnings the skin has already judged, the way a
 `# type: ignore` does in Python. `kdk-ignore-file` covers the whole file it sits
 in and `kdk-ignore` a single line. Text after a `;` is the reason, shown to
 anyone reading the results:
@@ -184,6 +186,9 @@ sitting on its own line applies to the line below it:
 Comments are read in the XML files of the skin's resolution folders, such as
 `xml` or `1080i`. A finding in any other file, `addon.xml` and the language
 files included, cannot be muted.
+
+A comment mutes warnings only. An error, or a warning that blocks a Kodi repo
+submission, stays listed and counted on a line the comment covers.
 
 Category names are the ones in the summary (`Labels`, `Fonts`, `Images`, `IDs`,
 `Variables`, `Maps`, `Includes`, `XML Validation`, `File Integrity`, `Kodi Repo`),

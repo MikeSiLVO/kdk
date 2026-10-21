@@ -102,3 +102,6 @@ def test_rules_lists_every_registered_rule_with_its_check():
     assert all(r["description"] == RULES[r["id"]] for r in payload["rules"])
     levels = {r["id"]: r["addon_checker"] for r in payload["rules"]}
     assert (levels["repo.schema"], levels["repo.file-type"], levels["fonts.undefined"]) == ("problem", "warning", None)
+    blocks = {r["id"]: r["blocks_submission"] for r in payload["rules"]}
+    assert [blocks[r] for r in ("repo.schema", "repo.no-screenshot", "repo.file-type", "fonts.undefined")] == [
+        True, True, False, False]
