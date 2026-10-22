@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.0] - 2026-10-22
+
+### Added
+
+- `xml.unknown-info-argument` (error): a `String.*` or `Integer.*` argument naming an info Kodi does not have, such as `String.IsEmpty(ListItem.Lable)`, which is always true.
+- `xml.unknown-infolabel` (error): an `$INFO[]` in label text naming an info Kodi does not have, which shows nothing, or only its prefix.
+- `xml.unknown-infolabel` also covers actions, static `<content>` items, the info argument of `$MAP[]` and the name in `<info>`.
+- `xml.invalid-color` also covers color tag text such as `<textcolor>`, not only attributes.
+- `labels.broken-string` (error): a `strings.po` string Kodi shows empty, cut short, or in English instead of the translation, because a line does not close or has text or spaces after its quote.
+- `files.po-unclosed` (error): a `strings.po` string that does not close where Kodi never reads it, such as the header. Weblate cannot load the file.
+- `files.po-trailing-text` (warning): text after a closing quote in `strings.po`, such as an unescaped `"`. msgfmt rejects it; Kodi and Weblate still read it.
+- `xml.xsp-unencoded` (error): a runtime value in an `xsp=` smart playlist filter that is not URL-encoded, such as `%22$INFO[ListItem.Title]%22` or `%5B$ESCINFO[ListItem.Genre]%5D`. A value holding `&` or `|` empties the list, and `+` turns into a space.
+- `xml.xsp-untraced` (warning): a runtime value in an `xsp=` filter that comes from outside the skin, which needs URL encoding unless whatever sets it already encodes it.
+- `xml.plugin-unencoded` (error): a runtime value in a `plugin://` URL query that is not URL-encoded, such as `?query=$INFO[ListItem.Title]`. A value holding `&` reaches the add-on cut short, and `+` turns into a space; `$ESCINFO` adds quotes the add-on receives.
+- `xml.plugin-untraced` (warning): a runtime value in a plugin URL query that comes from outside the skin.
+- `xml.plugin-typed-text` and `xml.xsp-typed-text` (warnings): an edit control's typed text, `$INFO[Control.GetLabel(id).Index(1)]`, in a plugin URL query or an `xsp=` filter. No skin label can URL-encode it, so a typed `&` cuts the value.
+- `repo.asset-transparency` (warning): an icon, screenshot or banner with transparent pixels, or a clearlogo without any. The add-on checker fails a repo PR on it, and only finds transparency in a PNG it reads as RGBA.
+- `repo.no-screenshot`, `repo.too-many-screenshots` and `repo.asset-location` (warnings): a skin with no screenshot or more than 10 in `<assets>`, or with its icon or fanart outside the `resources` folder. Kodi repo reviewers refuse a skin on them.
+- `kdk rules --json` gives each rule `blocking_warning`: `true` for a rule kdk reports as a warning that still blocks a Kodi repo submission, from the add-on checker or its reviewers.
+
+### Changed
+
+- `kdk rules --json` gives each rule an `addon_checker` level: `problem` when Kodi's add-on checker fails a repo PR on it, `warning`, or `null`.
+- `repo.file-type` says the add-on checker only warns about a file ending outside its whitelist.
+- An invalid attribute names the control that ignores it, such as `invalid attribute for <width>: min, which <control type=image> ignores`.
+- Image paths in `images.wrong-path` and the case mismatch messages are written the way the skin writes them, without `media/`.
+- A fault inside an include counts the windows it reaches, `(include 'X', in 2 windows)`, instead of calls.
+- A repeated read-once tag where an include's copy is never read, or an own copy repeats the include's value, is `xml.include-duplicate-tag` (warning). `xml.duplicate-tag` keeps the errors.
+- `xml.invalid-tag` follows the tags each control type reads: `<onfocus>` and `<onunfocus>` only on buttons and lists, `<pulseonselect>` only on buttons, no `<align>` or `<aligny>` on an image, and a list's `<defaultcontrol>` is accepted.
+- `kdk-ignore` mutes warnings only. An error, or a warning that blocks a Kodi repo submission, stays listed and counted.
+- The saved text report spells out `ERROR` and `WARNING` with `line N`, lists muted findings under the `kdk-ignore` comment that mutes them, and counts them beside the file name.
+
+### Fixed
+
+- An empty action from an include names the `$PARAM` in its text, not one in its condition, and an action whose condition is always false is not reported.
+- The controls Kodi adds to `DialogContextMenu.xml` (1001 up) and `DialogGameControllers.xml` (100-799) are no longer undefined ids.
+- `<texturesliderbardisabled>` and `<textureslidernibdisabled>` are valid on a sliderex; `<textureslidernibdisabled>` on a scrollbar is reported.
+- `<monofont>` counts as a use of its font, and an undefined one is reported.
+- An unused font is reported at its first definition, not its last.
+- Two identical faults inside one include call are both reported, not just the first.
+- An xsp value read from a static list item's property is traced through that item.
+
 ## [3.1.0] - 2026-10-18
 
 ### Changed
