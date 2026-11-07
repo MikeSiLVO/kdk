@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.1] - 2026-11-07
+
+### Changed
+
+- kdk and KodiDevKit now release together under one version number, so there is no kdk 3.3.0.
+
+### Fixed
+
+- The label of a list that script.skinvariables fills with `info=get_encoded_string`, such as `$INFO[Container(4001).ListItemAbsolute(0).Label]`, counts as URL-encoded and is no longer reported as `xml.plugin-unencoded` or `xml.xsp-unencoded`. The list's `<content>` can be the encoder's path or a `$VAR` holding it.
+- `xml.plugin-unencoded` checks every value in a plugin URL query, not only those before the first space, such as `$INFO[ListItem.Album]` in `?q=$INFO[ListItem.Artist] $INFO[ListItem.Album]`.
+
 ## [3.2.0] - 2026-10-22
 
 ### Added
