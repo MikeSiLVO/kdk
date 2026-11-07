@@ -157,7 +157,7 @@ still points at the right file.
 Run it on `ubuntu-latest`. Windows runners check text files out with CRLF line
 endings, which File Integrity reports as errors.
 
-## Silencing a finding
+## Muting a finding
 
 An XML comment mutes warnings the skin has already judged, the way a
 `# type: ignore` does in Python. `kdk-ignore-file` covers the whole file it sits
