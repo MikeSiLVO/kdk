@@ -12,15 +12,20 @@ from pathlib import Path
 logger = logging.getLogger("kdk.output.cache")
 
 
-def _cache_dir() -> Path:
-    """OS-native location for cached run results."""
+def cache_root() -> Path:
+    """OS-native location for everything kdk caches."""
     if sys.platform == "win32":
         base = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA") or str(Path.home())
-        return Path(base) / "kdk" / "runs"
+        return Path(base) / "kdk"
     if sys.platform == "darwin":
-        return Path.home() / "Library" / "Caches" / "kdk" / "runs"
+        return Path.home() / "Library" / "Caches" / "kdk"
     base = os.environ.get("XDG_CACHE_HOME") or str(Path.home() / ".cache")
-    return Path(base) / "kdk" / "runs"
+    return Path(base) / "kdk"
+
+
+def _cache_dir() -> Path:
+    """OS-native location for cached run results."""
+    return cache_root() / "runs"
 
 
 def _cache_file(skin_path: str) -> Path:

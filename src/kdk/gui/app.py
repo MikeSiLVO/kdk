@@ -6,7 +6,7 @@ import base64
 import os
 import sys
 
-from PySide6.QtCore import QByteArray, QObject, QThread, Signal
+from PySide6.QtCore import QByteArray, QObject, QThread, QTimer, Signal
 from PySide6.QtGui import QCloseEvent, QFont, QIcon
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QFileDialog, QHBoxLayout, QLabel,
@@ -50,12 +50,16 @@ class KdkApp(QMainWindow):
         self._editor_keys: list[str] = []
         self._worker_thread: QThread | None = None
         self._worker: _ValidationWorker | None = None
+        self._lookup = None
+        self._update_timer: QTimer | None = None
 
         self._build_ui()
         self._load_settings()
         self._restore_window_state()
+        self._start_update_check()
 
     def _build_ui(self):
+        """Build the window: path rows, actions, progress bar, issue tree and footer."""
         central = QWidget()
         self.setCentralWidget(central)
         root = QVBoxLayout(central)
@@ -105,8 +109,7 @@ class KdkApp(QMainWindow):
         self.progress = QProgressBar()
         self.progress.setRange(0, 100)
         self.progress.setVisible(False)
-        # Fusion's default chunk color is a muted gray that looks washed-out in
-        # light mode. Pin it to the icon's blue so it reads as a real fill.
+        # Fusion's default chunk color is a muted gray that looks washed-out in light mode
         self.progress.setStyleSheet(
             "QProgressBar {"
             " border: 1px solid palette(mid);"
@@ -131,11 +134,8 @@ class KdkApp(QMainWindow):
         self.tree.setStyleSheet(
             "QHeaderView::section { padding: 6px 10px; }"
             " QTreeView::item { padding: 4px 0; }"
-            # Branch column gets extra horizontal room so the chevron has a
-            # bigger hit area without needing a custom branch image.
             " QTreeView::branch { padding: 0 4px; }"
         )
-        # Double-click toggles a category row, opens the file for a leaf row.
         self.tree.itemDoubleClicked.connect(self._on_tree_double_clicked)
         root.addWidget(self.tree, stretch=1)
         bottom = QHBoxLayout()
@@ -149,6 +149,11 @@ class KdkApp(QMainWindow):
         self.editor_combo.currentIndexChanged.connect(self._on_editor_changed)
         bottom.addWidget(self.editor_combo)
 
+        self.update_label = QLabel("")
+        self.update_label.setOpenExternalLinks(True)
+        self.update_label.setVisible(False)
+        bottom.addWidget(self.update_label)
+
         from kdk import __version__
         self.version_btn = QPushButton(f"v{__version__}")
         self.version_btn.setFlat(True)
@@ -158,6 +163,28 @@ class KdkApp(QMainWindow):
         bottom.addWidget(self.version_btn)
 
         root.addLayout(bottom)
+
+    def _start_update_check(self):
+        """Start looking up a newer release in the background, unless the user turned it off."""
+        from kdk import update
+        if not update.enabled():
+            return
+        self._lookup = update.Lookup()
+        timer = QTimer(self)
+        timer.timeout.connect(self._show_update)
+        timer.start(500)
+        self._update_timer = timer
+
+    def _show_update(self):
+        """Show a link to the newer release once the lookup ends, if it found one."""
+        if self._lookup is None or self._update_timer is None or not self._lookup.done():
+            return
+        self._update_timer.stop()
+        from kdk import update
+        if self._lookup.version:
+            self.update_label.setText(f'<a href="{update.RELEASES_PAGE}">v{self._lookup.version} available</a>')
+            self.update_label.setToolTip(update.upgrade_hint().capitalize())
+            self.update_label.setVisible(True)
 
     def _load_settings(self):
         from kdk.config import load_config, detect_editors, EDITOR_DISPLAY_NAMES

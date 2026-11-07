@@ -76,7 +76,7 @@ def overrides_from(args):
 
 
 def cmd_validate(args):
-    """Validate a skin and cache its run, then show, save or print its issues; returns exit code."""
+    """Validate a skin, cache the run, report its issues and any newer kdk; returns exit code."""
     from kdk.core import CHECK_SEQUENCE, save_report, validate_skin
     from kdk.output.cache import save as save_run
     from kdk.output.payload import render_json
@@ -86,6 +86,9 @@ def cmd_validate(args):
         return fail(f"{skin_path} is not a directory", args.json)
 
     overrides = overrides_from(args)
+
+    from kdk import update
+    lookup = update.Lookup() if update.cli_wanted(args) else None
 
     if args.json or args.quiet:
         result = validate_skin(skin_path, config_overrides=overrides, isolated=args.isolated)
@@ -132,6 +135,11 @@ def cmd_validate(args):
             browse(listed, skin_path)
         else:
             render_issues(listed, skin_path)
+
+    newer = lookup.wait(1.0) if lookup else None
+    if newer:
+        from kdk import __version__
+        print(f"kdk {newer} is available, this is {__version__}; {update.upgrade_hint()}", file=sys.stderr)
 
     return exit_code(issues, args)
 

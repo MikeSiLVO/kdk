@@ -28,6 +28,7 @@ DEFAULTS = {
     # Editor for "open at line" - one of: code, sublime, notepad++, vim, nano, kate, gedit
     # or empty string for OS default (no line number support)
     "editor": "",
+    "update_check": True,
 }
 
 # {file} and {line} are substituted at call time. Sublime is handled specially

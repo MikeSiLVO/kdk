@@ -232,6 +232,7 @@ Example config file:
 | `language` | `"resource.language.en_gb"` | Language of the skin's `strings.po` that label ids are looked up in, as the folder name or its code (`en_gb`). |
 | `validation_exclude` | `["shortcuts"]` | Folder or file names XML Validation skips, matched against any part of the path. |
 | `editor` | `""` | Editor a double-click in the GUI opens the issue in: `code`, `sublime`, `notepad++`, `vim`, `nano`, `kate` or `gedit`. Empty opens the file in the system's default app, without going to the line. |
+| `update_check` | `true` | The GUI, and `kdk validate` in a terminal, say when a newer kdk is out. Runs in CI and runs with `--json`, `--github`, `--quiet` or `--isolated` never check. Setting `KDK_NO_UPDATE_CHECK=1` in the environment also turns it off. |
 
 ## License
 
