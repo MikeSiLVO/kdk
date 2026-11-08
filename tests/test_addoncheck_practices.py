@@ -40,6 +40,20 @@ class TestHabits(AddonCase):
         self.assertEqual(sorted((r["line"], r["severity"]) for r in self.rows(code(body), "py.sleep")),
                          [(4, "warning"), (5, "hint"), (8, "hint")])
 
+    def test_bounded_loops(self):
+        """A range loop warns once its sleeps reach a second; a loop over items always warns."""
+        body = ("import time\nimport xbmc\nfor i in range(5):\n    xbmc.sleep(30)\nfor i in range(10):\n"
+                "    time.sleep(0.5)\nfor item in items:\n    xbmc.sleep(delay)\n")
+        self.assertEqual(sorted((r["line"], r["severity"]) for r in self.rows(code(body), "py.sleep")),
+                         [(6, "warning"), (8, "warning")])
+
+    def test_sleep_after_abort(self):
+        """A sleep that runs only once waitForAbort returned True is left alone, even in a loop."""
+        body = ("import time\nimport xbmc\nmonitor = xbmc.Monitor()\nwhile True:\n"
+                "    if monitor.waitForAbort(0.2):\n        for i in range(4):\n            time.sleep(0.1)\n"
+                "        break\n")
+        self.assertEqual(self.rules(code(body), "py.sleep"), [])
+
     def test_print_and_sys_path(self):
         """A print warns unless it writes elsewhere or runs as __main__; sys.path changes warn."""
         body = ("import sys\nprint('x')\nprint('y', file=sys.stderr)\nsys.path.insert(0, 'lib')\n"

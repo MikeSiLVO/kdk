@@ -150,15 +150,44 @@ def _sys_path(sub: Submission, rel: str, node) -> dict:
                    "resources.lib or a module add-on")
 
 
-def _loop(node, parents: dict) -> bool:
-    """True when the node runs inside a loop of its own function."""
-    parent = parents.get(node)
+def _enclosing(node, parents: dict):
+    """Yield (child, parent) pairs up from the node to its function, class or module."""
+    child, parent = node, parents.get(node)
     while parent is not None and not isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda,
                                                          ast.ClassDef)):
-        if isinstance(parent, (ast.For, ast.AsyncFor, ast.While)):
-            return True
-        parent = parents.get(parent)
-    return False
+        yield child, parent
+        child, parent = parent, parents.get(parent)
+
+
+def _abort_test(test) -> bool:
+    """True when a condition holds only once Kodi has asked the add-on to stop."""
+    if isinstance(test, ast.BoolOp) and isinstance(test.op, ast.And):
+        return any(_abort_test(value) for value in test.values)
+    return isinstance(test, ast.Call) and isinstance(test.func, ast.Attribute) and \
+        test.func.attr in ("waitForAbort", "abortRequested")
+
+
+def _after_abort(node, parents: dict) -> bool:
+    """True when the node runs only after an abort check returned True."""
+    return any(isinstance(parent, ast.If) and child in parent.body and _abort_test(parent.test)
+               for child, parent in _enclosing(node, parents))
+
+
+def _iterations(node, parents: dict) -> float | None:
+    """Iterations of enclosing loops: constant ranges multiplied, else inf; None outside loops."""
+    count, looped = 1.0, False
+    for _, parent in _enclosing(node, parents):
+        if isinstance(parent, ast.While):
+            return float("inf")
+        if isinstance(parent, (ast.For, ast.AsyncFor)):
+            looped = True
+            bounds = parent.iter.args if isinstance(parent.iter, ast.Call) and \
+                isinstance(parent.iter.func, ast.Name) and parent.iter.func.id == "range" else None
+            values = [_number(arg) for arg in bounds or []]
+            if not bounds or any(v is None or v != int(v) for v in values):
+                return float("inf")
+            count *= len(range(*(int(v) for v in values if v is not None)))
+    return count if looped else None
 
 
 def _number(node) -> float | None:
@@ -189,13 +218,15 @@ def _call_rows(sub: Submission, rel: str, node: ast.Call, names: Names, parents:
     if isinstance(node.func, ast.Name) and node.func.id == "zip" and "zip" not in bound and "strict" in keywords \
             and not _guarded(node, parents):
         rows.append(_newer(sub, rel, node, "zip(strict=...)", "3.10"))
-    if called in ("time.sleep", "xbmc.sleep"):
+    if called in ("time.sleep", "xbmc.sleep") and not _after_abort(node, parents):
         value = _number(node.args[0]) if node.args else None
-        if _loop(node, parents):
+        seconds = None if value is None else value / 1000 if called == "xbmc.sleep" else value
+        runs = _iterations(node, parents)
+        if runs is not None and (runs == float("inf") or (seconds is not None and runs * seconds >= 1)):
             rows.append(finding("py.sleep-loop", path, line, called,
                                 f"{called} in a loop does not wake when Kodi asks the add-on to stop; use "
                                 f"xbmc.Monitor().waitForAbort() and break when it returns True"))
-        elif value is not None and value >= (1000 if called == "xbmc.sleep" else 1):
+        elif runs is None and seconds is not None and seconds >= 1:
             rows.append(finding("py.sleep-loop", path, line, called,
                                 f"{called} blocks without seeing Kodi's abort; xbmc.Monitor().waitForAbort() "
                                 f"returns early when Kodi stops", HINT))
