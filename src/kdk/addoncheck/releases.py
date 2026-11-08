@@ -51,6 +51,17 @@ CORE = {
 }
 
 
+def display(branch: str) -> str:
+    """The branch as messages name it, such as Piers."""
+    return branch.capitalize()
+
+
+def possessive(branch: str) -> str:
+    """The branch's possessive as messages write it, such as Piers' or Omega's."""
+    name = display(branch)
+    return name + ("'" if name.endswith("s") else "'s")
+
+
 def lower(branch: str) -> tuple[str, ...]:
     """Branches older than the one given, oldest first."""
     return BRANCHES[:BRANCHES.index(branch)]

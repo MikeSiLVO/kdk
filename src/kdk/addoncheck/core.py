@@ -10,7 +10,7 @@ from datetime import datetime
 from . import (api, artwork, dependencies, files, languages, licenses, manifest, practices, strings, syntax,
                translations)
 from .index import Index
-from .releases import TARGETS
+from .releases import TARGETS, display
 from .rules import ERROR, PREFIXES, finding
 from .submission import Submission
 
@@ -53,8 +53,8 @@ def validate_addon(path: str, release: str, *, index_dir: str | None = None, tre
     if not index_dir:
         notices.append("No index folder was given, so rules that compare against the Kodi repo's add-on lists "
                        "were skipped")
-    notices += [f"No usable {b}.xml.gz in the index folder, so rules that need the {b} add-on list were skipped"
-                for b in index.missing]
+    notices += [f"No usable {b}.xml.gz in the index folder, so rules that need the {display(b)} add-on list were "
+                f"skipped" for b in index.missing]
     issues: dict[str, list[dict]] = {}
     for row in rows:
         issues.setdefault(PREFIXES[row["rule"].split(".")[0]], []).append(row)

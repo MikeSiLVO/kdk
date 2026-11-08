@@ -14,7 +14,7 @@ from lxml.etree import XMLSchema
 from ..libs.validation.repo import VERSION, _plain_schema_error
 from . import versions
 from .packaging.version import Version
-from .releases import BRANCHES, CORE, higher
+from .releases import BRANCHES, CORE, display, higher, possessive
 from .rules import WARNING, finding
 from .submission import METADATA_POINTS, Submission
 
@@ -105,23 +105,25 @@ def _version_rows(sub: Submission, root) -> list[dict]:
         held = sub.index.highest(branch, sub.addon_id)
         held_parsed = versions.parse(held)
         if held_parsed is not None and parsed <= held_parsed:
+            name = display(branch)
             rows.append(finding("addon.version-not-higher", sub.xml_path, root.sourceline, branch,
-                                f"{branch} already holds version {held}, not below this {version}, so users on "
-                                f"{branch} never get this update"))
+                                f"{name} already holds version {held}, not below this {version}, so users on "
+                                f"{name} never get this update"))
     for branch in higher(sub.release):
         held = sub.index.highest(branch, sub.addon_id)
         held_parsed = versions.parse(held)
         if held_parsed is None or parsed < held_parsed:
             continue
+        name = display(branch)
         if _core_rises(sub, root, branch):
             rows.append(finding("addon.version-above-newer", sub.xml_path, root.sourceline, branch,
-                                f"{branch} holds version {held}, not above this {version}, and a core import this "
-                                f"build uses is too old for {branch}, so users moving to {branch} will not get "
+                                f"{name} holds version {held}, not above this {version}, and a core import this "
+                                f"build uses is too old for {name}, so users moving to {name} will not get "
                                 f"the update"))
         else:
             rows.append(finding("addon.version-above-newer", sub.xml_path, root.sourceline, branch,
-                                f"{branch} holds version {held}, not above this {version}, so users on {branch} "
-                                f"can be offered this build instead of {branch}'s own", WARNING))
+                                f"{name} holds version {held}, not above this {version}, so users on {name} "
+                                f"can be offered this build instead of {possessive(branch)} own", WARNING))
     return rows
 
 

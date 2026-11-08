@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from . import versions
 from .packaging.version import Version
-from .releases import BRANCHES, CORE
+from .releases import BRANCHES, CORE, display, possessive
 from .rules import WARNING, finding
 from .submission import Submission
 
@@ -83,7 +83,7 @@ def check(sub: Submission) -> list[dict]:
 
 
 def _core_rows(sub: Submission, node, addon: str, version: str | None) -> list[dict]:
-    """A core import against the oldest version the branch accepts, ships first and advises."""
+    """A core import with no version, or against the oldest accepted, first shipped and advised."""
     abi = CORE[addon][sub.release]
     if not version:
         if node.get("optional") == "true":
@@ -98,16 +98,16 @@ def _core_rows(sub: Submission, node, addon: str, version: str | None) -> list[d
     needed = versions.parse(node.get("minversion")) or parsed
     if parsed < floor:
         rows.append(finding("deps.abi-below-min", sub.xml_path, node.sourceline, addon,
-                            f"{addon} {version} is below {abi.floor}, the oldest {sub.release} accepts, so Kodi "
-                            f"refuses to install the add-on"))
+                            f"{addon} {version} is below {abi.floor}, the oldest {display(sub.release)} accepts, "
+                            f"so Kodi refuses to install the add-on"))
     elif needed > ceiling:
         rows.append(finding("deps.abi-above-branch", sub.xml_path, node.sourceline, addon,
                             f"{addon} {node.get('minversion') or version} is above {abi.ceiling}, which "
-                            f"{sub.release}'s first release ships, so the add-on cannot install there"))
+                            f"{possessive(sub.release)} first release ships, so the add-on cannot install there"))
     elif parsed < advised <= ceiling:
         rows.append(finding("deps.not-advised", sub.xml_path, node.sourceline, addon,
-                            f"the Kodi repo advises {addon} {abi.advised} for {sub.release}; {version} installs "
-                            f"fine"))
+                            f"the Kodi repo advises {addon} {abi.advised} for {display(sub.release)}; {version} "
+                            f"installs fine"))
     return rows
 
 
@@ -119,13 +119,13 @@ def _module_rows(sub: Submission, node, addon: str, version: str | None) -> list
         held = sub.index.highest(sub.release, addon)
         if held is None:
             return [finding("deps.unavailable", sub.xml_path, node.sourceline, addon,
-                            f"{addon} is not in the {sub.release} repository, so the add-on cannot install "
-                            f"until it is")]
+                            f"{addon} is not in the {display(sub.release)} repository, so the add-on cannot "
+                            f"install until it is")]
         held_parsed, parsed = versions.parse(held), versions.parse(version)
         if parsed is not None and held_parsed is not None and held_parsed < parsed:
             return [finding("deps.version-unavailable", sub.xml_path, node.sourceline, addon,
-                            f"{addon} {version} is needed but the {sub.release} repository holds {held}, so "
-                            f"Kodi will not install the add-on")]
+                            f"{addon} {version} is needed but the {display(sub.release)} repository holds "
+                            f"{held}, so Kodi will not install the add-on")]
     if not version:
         return [finding("deps.no-version", sub.xml_path, node.sourceline, addon,
                         f"the {addon} import has no version; give the oldest version the add-on works with",

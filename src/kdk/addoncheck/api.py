@@ -8,6 +8,7 @@ import json
 import os
 
 from .names import Names
+from .releases import display
 from .rules import HINT, WARNING, finding
 from .submission import Submission
 
@@ -233,8 +234,9 @@ def _jsonrpc_rows(sub: Submission, rel: str, line: int, node, names: Names) -> l
     known = _jsonrpc()[sub.release].get(method.lower())
     if known is None:
         return [finding("api.jsonrpc-schema", sub.abs(rel), line, method,
-                        f"{method} is not a JSON-RPC method on {sub.release}, so the call fails")]
+                        f"{method} is not a JSON-RPC method on {display(sub.release)}, so the call fails")]
     name, allowed = known
     bad = [p for p in props if allowed is not None and p not in allowed]
     return [finding("api.jsonrpc-schema", sub.abs(rel), line, f"{name} {p}",
-                    f"{name} does not accept the property {p} on {sub.release}, so the call fails") for p in bad]
+                    f"{name} does not accept the property {p} on {display(sub.release)}, so the call fails")
+            for p in bad]
