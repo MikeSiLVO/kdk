@@ -55,14 +55,27 @@ class TestVersion(AddonCase):
         """A matrix build at omega's version importing xbmc.gui, whose floor rises on omega."""
         imports = IMPORTS + '\n    <import addon="xbmc.gui" version="5.15.0"/>'
         self.write_index("omega", index_entry("script.test", "1.0.0"))
+        self.write_copies(omega=True)
         rows = self.rows(clean_files(imports=imports), "addon.version-above-newer", release="matrix")
         self.assertEqual([(r["subject"], r["severity"]) for r in rows], [("omega", "error")])
 
     def test_newer_branch_without_a_rising_floor_is_a_warning(self):
         """An omega build at piers' version with only xbmc.python, whose floor stays."""
         self.write_index("piers", index_entry("script.test", "1.0.0"))
+        self.write_copies(piers=True)
         rows = self.rows(clean_files(), "addon.version-above-newer")
         self.assertEqual([(r["subject"], r["severity"]) for r in rows], [("piers", "warning")])
+
+    def test_newer_branch_without_its_own_copy(self):
+        """Newer branch with only fallback copy gives no row; one not in copies.json, a notice."""
+        self.write_index("piers", index_entry("script.test", "1.0.0"))
+        self.write_copies(piers=False)
+        self.assertEqual(self.rules(clean_files(), "addon.version-above-newer"), [])
+        self.write_copies()
+        result = self.run_check(clean_files())
+        rules = [r["rule"] for rows in result["issues"].values() for r in rows]
+        self.assertNotIn("addon.version-above-newer", rules)
+        self.assertTrue(any("copies.json" in n and "Piers" in n for n in result["notices"]))
 
     def test_no_index_skips_with_a_notice(self):
         """Without an index folder the branch rules are skipped and one notice says so."""

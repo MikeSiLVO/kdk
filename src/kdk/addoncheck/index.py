@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import gzip
+import json
 import os
 import xml.etree.ElementTree as ET
 from typing import NamedTuple
@@ -33,10 +34,23 @@ class Index:
         self._branches: dict[str, dict[str, list[Entry]] | None] = {}
         # branches asked for whose list is missing, for the run's notices
         self.missing: list[str] = []
+        self._copies: dict[str, bool] | None = None
 
     def has(self, branch: str) -> bool:
         """True when the branch's list was given and reads."""
         return self._load(branch) is not None
+
+    def own_copy(self, branch: str) -> bool | None:
+        """Whether the branch has its own copy of the add-on, per copies.json; None when unknown."""
+        if self._copies is None:
+            self._copies = {}
+            try:
+                with open(os.path.join(self.folder or "", "copies.json"), encoding="utf-8") as f:
+                    data = json.load(f)
+                self._copies = {k: v for k, v in data.items() if isinstance(v, bool)} if isinstance(data, dict) else {}
+            except (OSError, ValueError):
+                pass
+        return self._copies.get(branch)
 
     def _load(self, branch: str) -> dict[str, list[Entry]] | None:
         """Branch entries by add-on id, cached; None if missing or broken, noted in missing."""

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import gzip
+import json
 import os
 import shutil
 import struct
@@ -109,6 +110,11 @@ class AddonCase(unittest.TestCase):
         body = "<addons>" + "".join(entries) + "</addons>"
         with gzip.open(os.path.join(self.index, f"{branch}.xml.gz"), "wb") as f:
             f.write(body.encode("utf-8"))
+
+    def write_copies(self, **branches: bool) -> None:
+        """Write copies.json, saying which branches hold their own copy of the add-on."""
+        with open(os.path.join(self.index, "copies.json"), "w", encoding="utf-8") as f:
+            json.dump(branches, f)
 
     def write_all_indexes(self, *entries: tuple[str, str]) -> None:
         """Write every branch's list, empty unless entries are given for it as (branch, entry)."""

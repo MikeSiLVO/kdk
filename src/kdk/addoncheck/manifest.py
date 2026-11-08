@@ -85,7 +85,7 @@ def check(sub: Submission) -> list[dict]:
 
 
 def _version_rows(sub: Submission, root) -> list[dict]:
-    """Version form and style, against this, older and newer branches; notice if not PEP 440."""
+    """Version form and style, against this, older, newer branches; notice when it can't compare."""
     version = sub.version
     if not version or not VERSION.match(version):
         what = f"Version {version!r} is not a version the Kodi repo accepts" if version else "addon.xml has no version"
@@ -115,6 +115,13 @@ def _version_rows(sub: Submission, root) -> list[dict]:
         if held_parsed is None or parsed < held_parsed:
             continue
         name = display(branch)
+        # a branch's list also carries older branches' copies, which the server falls back to
+        own = sub.index.own_copy(branch)
+        if own is None:
+            sub.notices.append(f"No copies.json entry for {name}, so addon.version-above-newer did not compare "
+                               f"with {name}")
+        if not own:
+            continue
         if _core_rises(sub, root, branch):
             rows.append(finding("addon.version-above-newer", sub.xml_path, root.sourceline, branch,
                                 f"{name} holds version {held}, not above this {version}, and a core import this "
