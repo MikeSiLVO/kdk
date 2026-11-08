@@ -68,7 +68,8 @@ kdk-gui = "kdk.gui.__main__:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-kdk = ["data/**/*", "libs/polib/LICENSE"]
+kdk = ["data/**/*", "libs/polib/LICENSE", "addoncheck/data/**/*", "addoncheck/packaging/LICENSE*",
+       "addoncheck/radon/LICENSE"]
 
 [tool.setuptools.dynamic]
 version = { attr = "kdk.__version__" }
@@ -79,7 +80,8 @@ typeCheckingMode = "basic"
 # `src/kdk` so the shared tests resolve `libs.*` the way conftest.py aliases it
 # at runtime; `tests` for the sublime mock they import.
 extraPaths = ["src", "src/kdk", "tests"]
-exclude = ["src/kdk/libs/polib", "build", "dist", "typings"]
+exclude = ["src/kdk/libs/polib", "src/kdk/addoncheck/packaging", "src/kdk/addoncheck/radon", "build", "dist",
+           "typings"]
 # Hand-written stubs modelling how this codebase actually uses lxml, and the
 # guarded sublime import in the shared engine.
 stubPath = "typings"
@@ -88,7 +90,7 @@ stubPath = "typings"
 target-version = "py310"
 line-length = 120
 # Vendored upstream, kept byte-identical so it can be re-vendored.
-exclude = ["src/kdk/libs/polib"]
+exclude = ["src/kdk/libs/polib", "src/kdk/addoncheck/packaging", "src/kdk/addoncheck/radon"]
 
 [tool.ruff.lint]
 # Stated rather than inherited: ruff 0.16 widened its default set, which changed

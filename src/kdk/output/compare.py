@@ -10,6 +10,8 @@ from .payload import FORMAT_VERSION
 
 STATUSES = ("new", "muted", "fixed")
 
+ADDON_KEYS = ("domain", "addoncheck_version", "addon_name", "addon_id", "addon_version", "provider_name")
+
 # caps the quadratic nearest-line pairing of one finding's rows
 _PAIRING_LIMIT = 250_000
 
@@ -18,8 +20,9 @@ _LANGUAGE_FILE = re.compile(r"(^|/)resource\.language\.[^/]+/")
 
 
 def mismatch(base, head):
-    """Why two runs cannot be compared, or None when kdk, format and Kodi release all match."""
-    for key, what in (("format_version", "format versions"), ("kdk_version", "kdk versions"),
+    """Why two runs cannot be compared, or None when kind, versions and Kodi release match."""
+    for key, what in (("domain", "kinds of run"), ("format_version", "format versions"),
+                      ("kdk_version", "kdk versions"), ("addoncheck_version", "add-on check versions"),
                       ("kodi_release", "Kodi releases")):
         if base.get(key) != head.get(key):
             return f"base and head have different {what}: {base.get(key)} and {head.get(key)}"
@@ -100,15 +103,18 @@ def compare(base, head):
     rows = sorted(_fold(rows), key=lambda r: (STATUSES.index(r["status"]), r["file"] or "", r["line"] or 0,
                                                r["rule"] or "", r["subject"] or "", r["message"] or ""))
     totals = {status: sum(r.get("count", 1) for r in rows if r["status"] == status) for status in STATUSES}
+    named =({key: head.get(key) for key in ADDON_KEYS} if head.get("domain") == "addon"
+             else {"skin_name": head.get("skin_name")})
+    head_totals = ("errors", "warnings", "hints", "muted") if "hints" in head else ("errors", "warnings", "muted")
     return {
         "format_version": FORMAT_VERSION,
         "kdk_version": __version__,
         "kodi_release": head.get("kodi_release"),
         "info_source": head.get("info_source"),
         "notices": head.get("notices") or [],
-        "skin_name": head.get("skin_name"),
+        **named,
         "base": bool(base),
         **totals,
-        "head": {key: head.get(key, 0) for key in ("errors", "warnings", "muted")},
+        "head": {key: head.get(key, 0) for key in head_totals},
         "rows": rows,
     }

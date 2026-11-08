@@ -14,3 +14,8 @@ tests/fixtures/**/*.po text eol=lf
 tests/fixtures/**/*.ttf binary
 
 src/kdk/data/icon.ico binary
+
+src/kdk/addoncheck/packaging/** linguist-vendored
+src/kdk/addoncheck/radon/** linguist-vendored
+src/kdk/addoncheck/data/schemas/** linguist-vendored
+src/kdk/addoncheck/data/spdx.json linguist-generated

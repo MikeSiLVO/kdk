@@ -26,6 +26,7 @@ err_console = Console(stderr=True, width=None if sys.stderr.isatty() else _PIPE_
 SEVERITY_STYLE = {
     SEVERITY_ERROR: ("error", "red"),
     SEVERITY_WARNING: ("warn", "yellow"),
+    "hint": ("hint", "blue"),
 }
 
 

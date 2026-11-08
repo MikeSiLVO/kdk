@@ -248,3 +248,10 @@ Based on the original [KodiDevKit](https://github.com/phil65/KodiDevKit) by Phil
 - `src/kdk/data/<release>/infonames.json` - the infolabel and boolean-condition names Kodi's parser accepts, taken from the Kodi sources.
 - `src/kdk/data/<release>/windows.json` and `obsolete_windows.json` - window names, ids and files, taken from the Kodi sources.
 - `src/kdk/data/addon_schema/` - addon.xml schemas copied verbatim from [kodi-addon-checker](https://github.com/xbmc/addon-check), Copyright (C) Team Kodi, licensed GPL-3.0-only.
+
+### Bundled add-on checker code and data
+
+- `src/kdk/addoncheck/data/schemas/` - the addon.xml schemas of [kodi-addon-checker](https://github.com/xbmc/addon-check) 0.0.36, copied verbatim, Copyright (C) Team Kodi, licensed GPL-3.0-only.
+- `src/kdk/addoncheck/data/spdx.json` - the license and exception ids of the [SPDX License List](https://spdx.org/licenses/) 3.29.0.
+- `src/kdk/addoncheck/packaging/` - `version.py` from [packaging](https://github.com/pypa/packaging) 26.3, copied verbatim, licensed Apache-2.0 OR BSD-2-Clause.
+- `src/kdk/addoncheck/radon/` - `raw.py` from [radon](https://github.com/rubik/radon) 6.0.1, copied verbatim, Copyright (c) 2012-2017 Michele Lacchia, licensed MIT.

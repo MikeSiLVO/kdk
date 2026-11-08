@@ -199,7 +199,7 @@ def compare_side(path, args):
 
 
 def cmd_compare(args):
-    """Compare head with base, or none for a new skin; returns 1 on a new finding, 0 when asked."""
+    """Compare head with base or none; returns 1 on a new non-hint finding, 0 when asked."""
     from kdk.output.compare import compare, mismatch
 
     if len(args.paths) > 2:
@@ -230,7 +230,8 @@ def cmd_compare(args):
     else:
         from kdk.output.render import render_compare
         render_compare(payload)
-    return 0 if args.exit_zero or not payload["new"] else 1
+    blocking = any(row["status"] == "new" and row["severity"] != "hint" for row in payload["rows"])
+    return 0 if args.exit_zero or not blocking else 1
 
 
 def cmd_rules(args):
@@ -330,6 +331,9 @@ def main():
     p_rules = subparsers.add_parser("rules", help="List every rule id with what it reports")
     p_rules.add_argument("--json", action="store_true", help="Output JSON instead of the terminal view")
     p_rules.set_defaults(func=cmd_rules)
+
+    from kdk.addoncheck.cli import add_parser as add_addon_parser
+    add_addon_parser(subparsers)
 
     args = parser.parse_args()
 
