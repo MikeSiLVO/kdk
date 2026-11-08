@@ -77,7 +77,8 @@ def clean_files(addon_id="script.test", **xml) -> dict:
         "LICENSE.txt": GPL_TEXT,
         "resources/icon.png": png(256, 256),
         "resources/fanart.jpg": jpeg(1280, 720),
-        "resources/settings.xml": '<?xml version="1.0"?>\n<settings version="1"/>\n',
+        "resources/settings.xml": '<?xml version="1.0"?>\n<settings version="1"><section id="script.test">'
+                                  '<category id="general" label="32000"/></section></settings>\n',
         "resources/language/resource.language.en_gb/strings.po": PO_HEADER + 'msgctxt "#32000"\nmsgid "Hello"\n'
                                                                              'msgstr ""\n',
     }

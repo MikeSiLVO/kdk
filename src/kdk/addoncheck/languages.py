@@ -9,6 +9,7 @@ from ..libs.addon.translations import strings_po_faults
 from ..libs.validation.label import _PO_EFFECTS, _PO_PROBLEMS
 from ..libs.validation.repo import LANG_CODE, ValidationRepo
 from .rules import finding
+from .strings import uses
 from .submission import Submission
 
 BASE = "resources/language"
@@ -55,9 +56,13 @@ def check(sub: Submission) -> list[dict]:
         rows.append(finding("lang.no-en-gb", sub.abs(BASE), 0, "resource.language.en_gb",
                             "there is no resource.language.en_gb folder; Kodi falls back to it for every string a "
                             "translation lacks"))
-    if not po_files and "resources/settings.xml" in sub.files:
-        rows.append(finding("lang.no-po", sub.abs("resources/settings.xml"), 0, "strings.po",
-                            "the add-on has settings but no strings.po, so its settings cannot be translated"))
+    if not po_files:
+        read_ids = uses(sub)[0]
+        if "resources/settings.xml" in sub.files or read_ids:
+            where = read_ids[0].rel if read_ids else "resources/settings.xml"
+            rows.append(finding("lang.no-po", sub.abs(where), read_ids[0].line if read_ids else 0, "strings.po",
+                                "the add-on has settings or reads string ids but has no strings.po, so its "
+                                "text cannot be translated"))
     for path, line, string_id, problem, effect in strings_po_faults(sub.path):
         message = f"String {string_id or 'in the header'} {_PO_PROBLEMS[problem]}"
         if effect:

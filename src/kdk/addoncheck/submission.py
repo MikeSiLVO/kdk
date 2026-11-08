@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import os
 import re
 import sys
@@ -42,6 +43,9 @@ class Submission:
         self.from_tree = bool(tree)
         self.exec_known = self.from_tree or sys.platform != "win32"
         self._bundled_roots: tuple[str, ...] | None = None
+        self._trees: dict[str, ast.Module] | None = None
+        # results one check works out and another reuses, by the computing check's name
+        self.shared: dict[str, object] = {}
 
     @property
     def addon_id(self) -> str:
@@ -146,6 +150,24 @@ class Submission:
                            for d in beside)):
                 roots.append(package)
         return tuple(r for r in roots if not any(r.startswith(o + "/") for o in roots))
+
+    def trees(self) -> dict[str, ast.Module]:
+        """Parsed syntax tree of every Python file that decodes and parses, by relative path."""
+        if self._trees is None:
+            self._trees = {}
+            for rel in sorted(self.files):
+                if not rel.endswith(".py"):
+                    continue
+                try:
+                    with open(self.abs(rel), "rb") as f:
+                        self._trees[rel] = ast.parse(f.read().decode("utf-8-sig"))
+                except (OSError, UnicodeDecodeError, SyntaxError, ValueError):
+                    continue
+        return self._trees
+
+    def own_code(self) -> dict[str, ast.Module]:
+        """Syntax trees of the add-on's own Python, bundled third-party code left out."""
+        return {rel: tree for rel, tree in self.trees().items() if not self.bundled(rel)}
 
     def abs(self, rel: str) -> str:
         """Absolute path of a path relative to the add-on folder."""
