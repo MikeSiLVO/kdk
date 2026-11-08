@@ -124,15 +124,17 @@ def _markup(text: str) -> Counter:
 
 
 def _placeholder_rows(sub: Submission, rel: str, string_id: str, entry: Entry) -> list[dict]:
-    """A translation whose placeholders, or label tags, differ from its own msgid's."""
+    """A translation whose placeholders, label tags or line breaks differ from its own msgid's."""
     rows = []
     source, target = _format_tokens(entry.msgid), _format_tokens(entry.msgstr)
     positional = [t for t in source if t.startswith("%") and not t.startswith("%(")]
     translated = [t for t in target if t.startswith("%") and not t.startswith("%(")]
     if Counter(source) != Counter(target) or positional != translated:
+        has = f"placeholders {' '.join(target)}" if target else "no placeholders"
+        english = " ".join(source) if source else "none"
         rows.append(finding("lang.placeholders", sub.abs(rel), entry.line, string_id,
-                            f"string {string_id} has placeholders {' '.join(target) or 'none'} where the English "
-                            f"has {' '.join(source) or 'none'}, so the add-on's formatting call fails"))
+                            f"string {string_id} has {has} where the English has {english}, so the add-on's "
+                            f"formatting call fails"))
     if _markup(entry.msgid) != _markup(entry.msgstr):
         rows.append(finding("lang.placeholders", sub.abs(rel), entry.line, string_id,
                             f"string {string_id} has other label tags or line breaks than the English, so "
