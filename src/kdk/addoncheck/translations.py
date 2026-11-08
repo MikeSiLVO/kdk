@@ -78,7 +78,7 @@ def _source_rows(sub: Submission, rel: str, by_id: dict[str, Entry], other: dict
     for string_id, entry in by_id.items():
         if entry.msgstr and entry.msgstr != entry.msgid:
             rows.append(finding("lang.en-gb-msgstr", sub.abs(rel), entry.line, string_id,
-                                f"string {string_id} has a msgstr that differs from its msgid; Kodi shows the "
+                                f"String {string_id} has a msgstr that differs from its msgid; Kodi shows the "
                                 f"msgid for English, so the msgstr text never appears"))
     meta = sub.metadata
     for context, tag in METADATA_CONTEXTS.items():
@@ -100,13 +100,13 @@ def _translation_rows(sub: Submission, rel: str, entries: dict[str, Entry], sour
         english = source.get(string_id)
         if english is None:
             rows.append(finding("lang.orphan-id", sub.abs(rel), entry.line, string_id,
-                                f"string {string_id} is not in en_gb, so Kodi never asks for it"))
+                                f"String {string_id} is not in en_gb, so Kodi never asks for it"))
             continue
         if not entry.msgstr:
             continue
         if entry.msgid != english.msgid:
             rows.append(finding("lang.outdated", sub.abs(rel), entry.line, string_id,
-                                f"string {string_id} translates an older English text; Kodi shows the English "
+                                f"String {string_id} translates an older English text; Kodi shows the English "
                                 f"string until the translation is updated"))
         else:
             rows += _placeholder_rows(sub, rel, string_id, entry)
@@ -133,10 +133,10 @@ def _placeholder_rows(sub: Submission, rel: str, string_id: str, entry: Entry) -
         has = f"placeholders {' '.join(target)}" if target else "no placeholders"
         english = " ".join(source) if source else "none"
         rows.append(finding("lang.placeholders", sub.abs(rel), entry.line, string_id,
-                            f"string {string_id} has {has} where the English has {english}, so the add-on's "
+                            f"String {string_id} has {has} where the English has {english}, so the add-on's "
                             f"formatting call fails"))
     if _markup(entry.msgid) != _markup(entry.msgstr):
         rows.append(finding("lang.placeholders", sub.abs(rel), entry.line, string_id,
-                            f"string {string_id} has other label tags or line breaks than the English, so "
+                            f"String {string_id} has other label tags or line breaks than the English, so "
                             f"formatting can run into the rest of the label", WARNING))
     return rows

@@ -167,27 +167,27 @@ def check(sub: Submission) -> list[dict]:
         if missing and (use.string_id, use.rel) not in reported:
             reported.add((use.string_id, use.rel))
             rows.append(finding("strings.missing-id", sub.abs(use.rel), use.line, str(use.string_id),
-                                f"string {use.string_id} is used but not in en_gb's strings.po, so it shows "
+                                f"String {use.string_id} is used but not in en_gb's strings.po, so it shows "
                                 f"empty"))
         elif use.source in (KODI, SKIN) and use.string_id in defined:
             rows.append(finding("strings.core-lookup", sub.abs(use.rel), use.line, str(use.string_id),
-                                f"string {use.string_id} is the add-on's own, but this lookup reads Kodi's and "
+                                f"String {use.string_id} is the add-on's own, but this lookup reads Kodi's and "
                                 f"the skin's strings, so it shows their string {use.string_id}; use "
                                 f"$ADDON[{sub.addon_id} {use.string_id}] or Addon().getLocalizedString"))
         elif use.source == OWN and use.rel.startswith("resources/skins/") and \
                 SKIN_RANGE[0] <= use.string_id <= SKIN_RANGE[1]:
             rows.append(finding("strings.range", sub.abs(use.rel), use.line, str(use.string_id),
-                                f"string {use.string_id} is in 31000-31999, the range readers take for a skin's "
+                                f"String {use.string_id} is in 31000-31999, the range readers take for a skin's "
                                 f"own strings"))
     for string_id, entry in sorted(defined.items()):
         if not any(low <= string_id <= high for low, high in ADDON_RANGES):
             rows.append(finding("strings.range", sub.abs(source_rel), entry.line, str(string_id),
-                                f"string {string_id} is outside 30000-30999 and 32000-32999, the ranges add-ons "
+                                f"String {string_id} is outside 30000-30999 and 32000-32999, the ranges add-ons "
                                 f"use by convention"))
     if not computed:
         used = {use.string_id for use in found}
         rows += [finding("strings.unused", sub.abs(source_rel), entry.line, str(string_id),
-                         f"string {string_id} is never used") for string_id, entry in sorted(defined.items())
+                         f"String {string_id} is never used") for string_id, entry in sorted(defined.items())
                  if string_id not in used]
     return rows
 

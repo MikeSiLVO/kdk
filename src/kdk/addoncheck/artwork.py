@@ -32,7 +32,7 @@ def check(sub: Submission) -> list[dict]:
             listed.add(os.path.normpath(image).replace(os.sep, "/"))
             if not os.path.isfile(sub.abs(image)):
                 rows.append(finding("art.missing", sub.xml_path, node.sourceline, kind,
-                                    f"{kind} {image} does not exist"))
+                                    f"{kind.capitalize()} {image} does not exist"))
                 continue
             rows += _image_rows(sub, kind, image, spec, unreadable)
         fallback = FALLBACK.get(kind)
@@ -44,7 +44,7 @@ def check(sub: Submission) -> list[dict]:
             rows += _image_rows(sub, kind, fallback, spec, unreadable)
         else:
             rows.append(finding(f"art.no-{kind}", sub.xml_path, sub.root.sourceline, kind,
-                                f"the add-on has no {kind}; add one and list it in <assets>"))
+                                f"The add-on has no {kind}; add one and list it in <assets>"))
     for rel in sorted(sub.files):
         name = rel.rpartition("/")[2]
         if rel not in unreadable and IMAGE_NAME.match(name) and "Type" not in dict(get_image_info(sub.abs(rel))):
@@ -65,25 +65,29 @@ def _image_rows(sub: Submission, kind: str, image: str, spec, unreadable: set[st
     if "Type" not in info:
         unreadable.add(image)
         return [finding("art.unreadable", path, 0, image,
-                        f"{kind} {image} cannot be read as an image; it may be damaged or another format")]
+                        f"{kind.capitalize()} {image} cannot be read as an image; it may be damaged or another "
+                        f"format")]
     rows = []
     ext = os.path.splitext(image)[1]
     if ext not in extensions:
         rows.append(finding("art.type", path, 0, kind,
-                            f"{kind} must be {' or '.join(extensions)}, not {ext or 'without an ending'}"))
+                            f"{kind.capitalize()} must be {' or '.join(extensions)}, not "
+                            f"{ext or 'without an ending'}"))
     if transparent is not None:
         has_alpha = has_transparent_pixels(path) is True
         if has_alpha and not transparent:
             rows.append(finding("art.transparency", path, 0, kind,
-                                f"{kind} has transparent pixels; the Kodi repo wants it solid"))
+                                f"{kind.capitalize()} has transparent pixels; the Kodi repo wants it solid"))
         elif transparent and not has_alpha:
             rows.append(finding("art.transparency", path, 0, kind,
-                                f"{kind} has no transparent pixels; the Kodi repo wants a transparent background"))
+                                f"{kind.capitalize()} has no transparent pixels; the Kodi repo wants a transparent "
+                                f"background"))
     dims = info.get("Dimensions", "")
     if dims and tuple(int(v) for v in dims.split("x")) not in sizes:
         allowed = " or ".join(f"{w}x{h}" for w, h in sizes)
-        rows.append(finding("art.size", path, 0, kind, f"{kind} is {dims}; the Kodi repo accepts {allowed}"))
+        rows.append(finding("art.size", path, 0, kind,
+                            f"{kind.capitalize()} is {dims}; the Kodi repo accepts {allowed}"))
     if max_kb and os.path.getsize(path) > max_kb * 1024:
         rows.append(finding("art.file-size", path, 0, kind,
-                            f"{kind} is {os.path.getsize(path) // 1024}KB, over the {max_kb}KB limit"))
+                            f"{kind.capitalize()} is {os.path.getsize(path) // 1024}KB, over the {max_kb}KB limit"))
     return rows

@@ -65,11 +65,11 @@ def check(sub: Submission) -> list[dict]:
                                 "script.module.simplejson is not needed; Python's own json module does the same"))
         if addon == "xbmc.addon":
             rows.append(finding("deps.unneeded-core", sub.xml_path, node.sourceline, addon,
-                                "the xbmc.addon import is not needed by Python add-ons; remove it"))
+                                "The xbmc.addon import is not needed by Python add-ons; remove it"))
         elif addon == "xbmc.gui" and not any(rel.startswith("resources/skins/") and rel.lower().endswith(".xml")
                                              for rel in sub.files):
             rows.append(finding("deps.unneeded-core", sub.xml_path, node.sourceline, addon,
-                                "the xbmc.gui import is needed only for window XML under resources/skins; this "
+                                "The xbmc.gui import is needed only for window XML under resources/skins; this "
                                 "add-on has none"))
     if sub.broken:
         return rows
@@ -89,7 +89,7 @@ def _core_rows(sub: Submission, node, addon: str, version: str | None) -> list[d
         if node.get("optional") == "true":
             return []
         return [finding("deps.no-version", sub.xml_path, node.sourceline, addon,
-                        f"the {addon} import has no version, which Kodi reads as too old to install")]
+                        f"The {addon} import has no version, which Kodi reads as too old to install")]
     parsed = versions.parse(version)
     if parsed is None:
         return []
@@ -106,7 +106,7 @@ def _core_rows(sub: Submission, node, addon: str, version: str | None) -> list[d
                             f"{possessive(sub.release)} first release ships, so the add-on cannot install there"))
     elif parsed < advised <= ceiling:
         rows.append(finding("deps.not-advised", sub.xml_path, node.sourceline, addon,
-                            f"the Kodi repo advises {addon} {abi.advised} for {display(sub.release)}; {version} "
+                            f"The Kodi repo advises {addon} {abi.advised} for {display(sub.release)}; {version} "
                             f"installs fine"))
     return rows
 
@@ -128,7 +128,7 @@ def _module_rows(sub: Submission, node, addon: str, version: str | None) -> list
                             f"{held}, so Kodi will not install the add-on")]
     if not version:
         return [finding("deps.no-version", sub.xml_path, node.sourceline, addon,
-                        f"the {addon} import has no version; give the oldest version the add-on works with",
+                        f"The {addon} import has no version; give the oldest version the add-on works with",
                         WARNING)]
     return []
 
@@ -152,5 +152,5 @@ def _consumer_rows(sub: Submission, root) -> list[dict]:
     if consumers:
         return []
     return [finding("deps.module-no-consumer", sub.xml_path, root.sourceline, addon_id,
-                    f"no add-on in the Kodi repo imports {addon_id}; a module is accepted for the add-ons that "
+                    f"No add-on in the Kodi repo imports {addon_id}; a module is accepted for the add-ons that "
                     f"use it")]

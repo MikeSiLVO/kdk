@@ -54,14 +54,14 @@ def check(sub: Submission) -> list[dict]:
     if new_style and not language_addon and not any(
             rel.rsplit("/", 2)[-2].casefold() == "resource.language.en_gb" for rel in new_style):
         rows.append(finding("lang.no-en-gb", sub.abs(BASE), 0, "resource.language.en_gb",
-                            "there is no resource.language.en_gb folder; Kodi falls back to it for every string a "
+                            "There is no resource.language.en_gb folder; Kodi falls back to it for every string a "
                             "translation lacks"))
     if not po_files:
         read_ids = uses(sub)[0]
         if "resources/settings.xml" in sub.files or read_ids:
             where = read_ids[0].rel if read_ids else "resources/settings.xml"
             rows.append(finding("lang.no-po", sub.abs(where), read_ids[0].line if read_ids else 0, "strings.po",
-                                "the add-on has settings or reads string ids but has no strings.po, so its "
+                                "The add-on has settings or reads string ids but has no strings.po, so its "
                                 "text cannot be translated"))
     for path, line, string_id, problem, effect in strings_po_faults(sub.path):
         message = f"String {string_id or 'in the header'} {_PO_PROBLEMS[problem]}"
@@ -114,7 +114,7 @@ def _known_code_rows(sub: Submission, po_files: list[str], invalid: set[str]) ->
         if folder_parent == BASE and name.startswith("resource.language.") and parent not in invalid \
                 and name.casefold() not in known:
             rows.append(finding("lang.code-unknown", sub.abs(parent), 0, name,
-                                f"no Kodi language is named {name.casefold()}, so Kodi never reads this "
+                                f"No Kodi language is named {name.casefold()}, so Kodi never reads this "
                                 f"translation"))
     return rows
 
@@ -123,8 +123,10 @@ def _po_rows(sub: Submission, rel: str) -> list[dict]:
     """One strings.po: encoding, header, BOM, parsing, duplicate ids, CRLF, entries Kodi skips."""
     repo = ValidationRepo(SimpleNamespace(path=sub.path))
     repo._check_po(rel, sub.abs(rel))
+    # a plain first word of the shared messages is lowercase after their "Kodi repo: " prefix
     rows = [finding(PO_RULES[issue["rule"]], issue["file"], issue["line"], issue["subject"],
-                    issue["message"].removeprefix("Kodi repo: "))
+                    re.sub(r"^[a-z]+(?= )", lambda m: m.group(0).capitalize(),
+                           issue["message"].removeprefix("Kodi repo: ")))
             for issue in repo.issues if issue["rule"] in PO_RULES]
     try:
         with open(sub.abs(rel), "rb") as f:
@@ -156,7 +158,7 @@ def _msgctxt_rows(sub: Submission, rel: str, text: str) -> list[dict]:
         value = found.group(1)
         if seen_in_entry > 1:
             rows.append(finding("lang.msgctxt", sub.abs(rel), number, value,
-                                f"a second msgctxt in one entry; without a blank line between them Kodi reads one "
+                                f"A second msgctxt in one entry; without a blank line between them Kodi reads one "
                                 f"entry, and string {value} is lost"))
         elif not re.fullmatch(r"#\d+", value) and value not in METADATA_CONTEXTS:
             rows.append(finding("lang.msgctxt", sub.abs(rel), number, value,

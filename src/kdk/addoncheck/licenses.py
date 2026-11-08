@@ -55,7 +55,7 @@ def check(sub: Submission) -> list[dict]:
     has_dir = any(rel.startswith("LICENSES/") for rel in sub.files)
     if not has_dir and not any("/" not in rel and ROOT_LICENSE.match(rel) for rel in sub.files):
         rows.append(finding("license.file-missing", sub.path, 0, "LICENSE",
-                            "no license file such as LICENSE.txt in the add-on's root; the Kodi repo needs the "
+                            "No license file such as LICENSE.txt in the add-on's root; the Kodi repo needs the "
                             "license text shipped"))
     ids = None
     meta = sub.metadata
@@ -195,7 +195,7 @@ def _placeholder_rows(sub: Submission) -> list[dict]:
             for line, text in _commentary(sub.abs(rel)):
                 if any(p in text for p in GNU_PLACEHOLDERS):
                     rows.append(finding("license.placeholder", sub.abs(rel), line, rel,
-                                        "the GNU license notice still has its placeholders; fill in the program "
+                                        "The GNU license notice still has its placeholders; fill in the program "
                                         "name, year and author"))
                     break
         elif ANY_LICENSE.match(name):

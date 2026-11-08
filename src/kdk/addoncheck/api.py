@@ -150,7 +150,7 @@ def _call_rows(sub: Submission, rel: str, node: ast.Call, called: str | None, na
     if method in ("setProperty", "getProperty") and called and called.startswith("xbmcgui.ListItem.") and \
             sub.release != "matrix" and _literal(node.args[0] if node.args else None).lower() in RESUME_KEYS:
         rows.append(finding("py.deprecated-logged", path, line, _literal(node.args[0]),
-                            f"the {_literal(node.args[0])} property logs a deprecation warning; use "
+                            f"The {_literal(node.args[0])} property logs a deprecation warning; use "
                             f"InfoTagVideo.setResumePoint() and getResumeTime()"))
     if method == "waitForAbort" and node.args and _waits_forever(node.args[0]):
         rows.append(finding("py.waitforabort-zero", path, line, "waitForAbort",

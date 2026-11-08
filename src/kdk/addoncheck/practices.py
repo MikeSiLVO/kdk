@@ -105,7 +105,7 @@ def _annotation_rows(sub: Submission, rel: str, tree: ast.Module) -> list[dict]:
             if generic or union:
                 text = ast.unparse(node)
                 rows.append(finding("py.annotations-floor", sub.abs(rel), getattr(node, "lineno", 0), text,
-                                    f"the annotation {text} raises TypeError on Python 3.8 when the module loads; "
+                                    f"The annotation {text} raises TypeError on Python 3.8 when the module loads; "
                                     f"add from __future__ import annotations or use the typing names"))
                 break
     return rows
@@ -146,7 +146,7 @@ def _name_rows(sub: Submission, rel: str, node, names: Names, parents: dict, bou
 def _sys_path(sub: Submission, rel: str, node) -> dict:
     """The row for a change to sys.path."""
     return finding("py.sys-path", sub.abs(rel), node.lineno, "sys.path",
-                   "changing sys.path makes imports depend on the order add-ons load; import through "
+                   "Changing sys.path makes imports depend on the order add-ons load; import through "
                    "resources.lib or a module add-on")
 
 
@@ -307,6 +307,6 @@ def _settings_key_rows(sub: Submission) -> list[dict]:
         default = node.get("default") or (node.findtext("default") or "")
         if _key_name(setting) and _looks_like_key(default.strip()):
             rows.append(finding("py.plaintext-key", sub.abs(rel), node.sourceline or 0, setting,
-                                f"the default of {setting} is a key in plain text; obfuscate it, as Kodi repo "
+                                f"The default of {setting} is a key in plain text; obfuscate it, as Kodi repo "
                                 f"reviewers ask"))
     return rows

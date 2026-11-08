@@ -88,14 +88,14 @@ def _version_rows(sub: Submission, root) -> list[dict]:
     """Version form and style, against this, older and newer branches; notice if not PEP 440."""
     version = sub.version
     if not version or not VERSION.match(version):
-        what = f"version {version!r} is not a version the Kodi repo accepts" if version else "addon.xml has no version"
+        what = f"Version {version!r} is not a version the Kodi repo accepts" if version else "addon.xml has no version"
         return [finding("addon.version-format", sub.xml_path, root.sourceline, version,
                         f"{what}; use major.minor.revision such as 1.0.0, optionally with a suffix such as "
                         f"+matrix.1")]
     rows = []
     if not VERSION_STYLE.match(version):
         rows.append(finding("addon.version-style", sub.xml_path, root.sourceline, version,
-                            f"version {version} is not major.minor.revision such as 1.0.0"))
+                            f"Version {version} is not major.minor.revision such as 1.0.0"))
     parsed = versions.parse(version)
     if parsed is None:
         sub.notices.append(f"Version {version} is not a PEP 440 version, so it was not compared with the "
@@ -142,7 +142,7 @@ def _id_rows(sub: Submission, root) -> list[dict]:
     rows = []
     if addon_id != sub.folder:
         rows.append(finding("addon.id-folder", sub.xml_path, root.sourceline, addon_id,
-                            f"id {addon_id} differs from the folder name {sub.folder}; Kodi installs an add-on in "
+                            f"The id {addon_id} differs from the folder name {sub.folder}; Kodi installs an add-on in "
                             f"a folder named after its id"))
     if sub.broken or not sub.index.has(sub.release) or sub.index.contains(sub.release, addon_id):
         return rows
@@ -150,11 +150,11 @@ def _id_rows(sub: Submission, root) -> list[dict]:
     prefix = ID_PREFIXES.get(points[0] or "") if points else None
     if not ID_CHARS.match(addon_id):
         rows.append(finding("addon.id-format", sub.xml_path, root.sourceline, addon_id,
-                            f"id {addon_id} has uppercase letters or characters other than a-z, 0-9, '.', '_' and "
+                            f"The id {addon_id} has uppercase letters or characters other than a-z, 0-9, '.', '_' and "
                             f"'-'"))
     elif prefix and not addon_id.startswith(prefix):
         rows.append(finding("addon.id-format", sub.xml_path, root.sourceline, addon_id,
-                            f"id {addon_id} does not start with {prefix}, the prefix the Kodi repo uses for a "
+                            f"The id {addon_id} does not start with {prefix}, the prefix the Kodi repo uses for a "
                             f"{points[0]} add-on"))
     return rows
 
@@ -189,7 +189,7 @@ def _schema_rows(sub: Submission, root) -> list[dict]:
         base = VALID_POINTS.get(point)
         if base is None:
             rows.append(finding("addon.extension-point", sub.xml_path, ext.sourceline, point,
-                                f"{point or 'an empty point'} is not an extension point the Kodi repo knows"))
+                                f"{point or 'An empty point'} is not an extension point the Kodi repo knows"))
             continue
         schema = _schema(sub.release, base)
         if schema is not None:
@@ -256,7 +256,7 @@ def _extension_rows(sub: Submission, root) -> list[dict]:
                                     f"{library} does not exist, so Kodi has nothing to run for {point}"))
         if point == "xbmc.service" and ext.get("start") is not None:
             rows.append(finding("addon.service-start", sub.xml_path, ext.sourceline, "start",
-                                "the start attribute on xbmc.service is refused by the Kodi repo's schema; Kodi "
+                                "The start attribute on xbmc.service is refused by the Kodi repo's schema; Kodi "
                                 "ignores it, so remove it"))
     return rows
 
@@ -268,7 +268,7 @@ def _metadata_rows(sub: Submission, root) -> list[dict]:
     name = root.get("name") or ""
     if re.search(r"(?i)\b(kodi|xbmc)\b", name) and not sub.addon_id.startswith("script.module."):
         rows.append(finding("addon.name-kodi", sub.xml_path, root.sourceline, name,
-                            f"the name {name!r} uses Kodi or XBMC, which the Kodi team asks add-ons to leave out"))
+                            f"The name {name!r} uses Kodi or XBMC, which the Kodi team asks add-ons to leave out"))
     if meta is None:
         return rows
     rows += _language_rows(sub, meta) + _news_rows(sub, meta)
@@ -297,7 +297,7 @@ def _language_rows(sub: Submission, meta) -> list[dict]:
                                 f"language matches none of them see an empty {tag}"))
         elif len(nodes) == 1 and langs[0] is not None and langs[0] != "en_GB":
             rows.append(finding("addon.lang-en-gb", sub.xml_path, nodes[0].sourceline, tag,
-                                f"the only <{tag}> has lang=\"{langs[0]}\"; the source text is lang=\"en_GB\"",
+                                f"The only <{tag}> has lang=\"{langs[0]}\"; the source text is lang=\"en_GB\"",
                                 WARNING))
         for node in nodes:
             lang = node.get("lang")
@@ -314,7 +314,7 @@ def _news_rows(sub: Submission, meta) -> list[dict]:
     news = meta.findall("news")
     if not any((node.text or "").strip() for node in news):
         rows.append(finding("addon.news-missing", sub.xml_path, meta.sourceline, "news",
-                            "no <news>, so users browsing the repo see no list of changes"))
+                            "No <news>, so users browsing the repo see no list of changes"))
     elif "changelog.txt" in sub.files:
         rows.append(finding("addon.changelog-file", sub.abs("changelog.txt"), 0, "changelog.txt",
                             "Kodi reads changelog.txt only when <news> is empty, so beside <news> it is never shown"))
@@ -372,5 +372,5 @@ def _placeholder_rows(sub: Submission, meta) -> list[dict]:
             msgid = re.match(r'\s*msgid\s+"(.*)"\s*$', line)
             if msgid and (_placeholder(msgid.group(1)) or PLACEHOLDER_WORDS.search(msgid.group(1))):
                 rows.append(finding("addon.placeholder", sub.abs(en_gb), number, msgid.group(1)[:40],
-                                    "an English string holds placeholder text", WARNING))
+                                    "An English string holds placeholder text", WARNING))
     return rows

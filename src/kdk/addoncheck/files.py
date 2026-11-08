@@ -29,7 +29,7 @@ def check(sub: Submission) -> list[dict]:
     rows, reported = _unwanted_rows(sub)
     if ".tests-config.json" in sub.files:
         rows.append(finding("files.tests-config", sub.abs(".tests-config.json"), 0, ".tests-config.json",
-                            "the Kodi repo's checker reads .tests-config.json as its own settings, so a shipped "
+                            "The Kodi repo's checker reads .tests-config.json as its own settings, so a shipped "
                             "one changes what the repo's CI checks"))
     if ".module." not in sub.folder:
         for rel in sub.files:
