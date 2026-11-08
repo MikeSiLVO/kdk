@@ -18,6 +18,9 @@ METADATA_POINTS = ("xbmc.addon.metadata", "kodi.addon.metadata")
 MODULE_NAMES = {"requests", "urllib3", "chardet", "idna", "certifi", "six", "bs4", "soupsieve", "dateutil",
                 "simplejson", "yaml", "html5lib", "websocket", "routing"}
 
+DEV_FOLDERS = {"tests", "test", "__pycache__", ".idea", ".vscode", ".claude", ".ruff_cache", ".mypy_cache",
+               ".pytest_cache", ".tox", "typings"}
+
 _LICENSE_FILE = re.compile(r"(?i)^(license|licence|copying)")
 _GIT_QUOTED = re.compile(r'^"(.*)"$')
 
@@ -129,9 +132,13 @@ class Submission:
 
     def bundled(self, rel: str) -> bool:
         """True when the path lies inside third-party code bundled with the add-on."""
+        return any(rel.startswith(root + "/") for root in self.bundled_roots())
+
+    def bundled_roots(self) -> tuple[str, ...]:
+        """Outermost folders of bundled third-party code, found on first use."""
         if self._bundled_roots is None:
             self._bundled_roots = self._find_bundled()
-        return any(rel.startswith(root + "/") for root in self._bundled_roots)
+        return self._bundled_roots
 
     def _find_bundled(self) -> tuple[str, ...]:
         """Find package folders that hold a license, sit beside package metadata or are a module."""
@@ -166,8 +173,10 @@ class Submission:
         return self._trees
 
     def own_code(self) -> dict[str, ast.Module]:
-        """Syntax trees of the add-on's own Python, bundled third-party code left out."""
-        return {rel: tree for rel, tree in self.trees().items() if not self.bundled(rel)}
+        """Syntax trees of the add-on's own Python, bundled code and development folders out."""
+        return {rel: tree for rel, tree in self.trees().items() if not self.bundled(rel)
+                and not any(part.lower() in DEV_FOLDERS or part.lower().endswith(".egg-info")
+                            for part in rel.split("/")[:-1])}
 
     def abs(self, rel: str) -> str:
         """Absolute path of a path relative to the add-on folder."""

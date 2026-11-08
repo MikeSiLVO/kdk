@@ -7,7 +7,8 @@ import os
 import time
 from datetime import datetime
 
-from . import artwork, dependencies, files, languages, licenses, manifest, strings, syntax, translations
+from . import (api, artwork, dependencies, files, languages, licenses, manifest, practices, strings, syntax,
+               translations)
 from .index import Index
 from .releases import TARGETS
 from .rules import ERROR, PREFIXES, finding
@@ -15,7 +16,7 @@ from .submission import Submission
 
 logger = logging.getLogger("kdk.addoncheck")
 
-CHECKS = (manifest, dependencies, files, languages, translations, strings, licenses, artwork, syntax)
+CHECKS = (manifest, dependencies, files, languages, translations, strings, licenses, artwork, syntax, practices, api)
 
 # a broken add-on still gets its version, id and Python 3 import checked
 BROKEN_CHECKS = (manifest, dependencies)

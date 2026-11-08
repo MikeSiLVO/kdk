@@ -1,25 +1,33 @@
-"""Kodi module names in add-on Python: what a name, attribute chain or call refers to."""
+"""Imported names in add-on Python: what a name, attribute chain or call refers to."""
 
 from __future__ import annotations
 
 import ast
 
-KODI_MODULES = {"xbmc", "xbmcgui", "xbmcvfs", "xbmcaddon", "xbmcplugin", "xbmcdrm"}
+# Kodi methods whose result is an instance of another Kodi class
+RETURNS = {
+    "xbmcgui.ListItem.getVideoInfoTag": "xbmc.InfoTagVideo",
+    "xbmcgui.ListItem.getMusicInfoTag": "xbmc.InfoTagMusic",
+    "xbmcgui.ListItem.getPictureInfoTag": "xbmc.InfoTagPicture",
+    "xbmcgui.ListItem.getGameInfoTag": "xbmc.InfoTagGame",
+    "xbmc.Player.getVideoInfoTag": "xbmc.InfoTagVideo",
+    "xbmc.Player.getMusicInfoTag": "xbmc.InfoTagMusic",
+    "xbmcaddon.Addon.getSettings": "xbmcaddon.Settings",
+}
 
 
 class Names:
-    """Kodi names one file binds: imported modules, classes, functions and class instances."""
+    """Names one file binds: imported modules, classes and functions, and instances of classes."""
 
     def __init__(self, tree: ast.AST):
-        # local name, or ".attr" for self.attr, to a dotted Kodi name; an instance ends in "()"
+        # local name, or ".attr" for self.attr, to a dotted name; an instance ends in "()"
         self.bound: dict[str, str] = {}
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
-                    top = alias.name.split(".")[0]
-                    if top in KODI_MODULES:
-                        self.bound.setdefault(alias.asname or top, alias.name if alias.asname else top)
-            elif isinstance(node, ast.ImportFrom) and (node.module or "") in KODI_MODULES:
+                    self.bound.setdefault(alias.asname or alias.name.split(".")[0],
+                                          alias.name if alias.asname else alias.name.split(".")[0])
+            elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
                 for alias in node.names:
                     if alias.name != "*":
                         self.bound.setdefault(alias.asname or alias.name, f"{node.module}.{alias.name}")
@@ -37,7 +45,7 @@ class Names:
                             self.bound.setdefault(key, name)
 
     def qualify(self, node: ast.AST | None) -> str | None:
-        """Dotted Kodi name of the expression, ending "()" for an instance; None when untraced."""
+        """Dotted name of the expression, ending "()" for an instance; None when untraced."""
         if isinstance(node, ast.Name):
             return self.bound.get(node.id)
         if isinstance(node, ast.Attribute):
@@ -50,11 +58,13 @@ class Names:
             return f"{base[:-2] if base.endswith('()') else base}.{node.attr}"
         if isinstance(node, ast.Call):
             called = self.qualify(node.func)
+            if called in RETURNS:
+                return RETURNS[called] + "()"
             return f"{called}()" if called and not called.endswith("()") else None
         return None
 
     def call(self, node: ast.Call) -> str | None:
-        """Dotted Kodi name of what a call runs, such as xbmcgui.Dialog.ok; None when untraced."""
+        """Dotted name of what a call runs, such as xbmcgui.Dialog.ok; None when untraced."""
         return self.qualify(node.func)
 
 

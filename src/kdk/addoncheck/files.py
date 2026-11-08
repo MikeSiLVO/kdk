@@ -9,11 +9,9 @@ from collections import defaultdict
 
 from ..libs.validation.repo import WHITELIST
 from .rules import finding
-from .submission import Submission
+from .submission import DEV_FOLDERS, Submission
 
 GIT_NAMES = {".git", ".github", ".gitignore", ".gitattributes", ".gitmodules", ".gitkeep", ".gitlab-ci.yml"}
-DEV_FOLDERS = {"tests", "test", "__pycache__", ".idea", ".vscode", ".claude", ".ruff_cache", ".mypy_cache",
-               ".pytest_cache", ".tox", "typings"}
 DEV_FILES = ("*.pyc", "*.pyo", ".travis.yml", "setup.py", "setup.cfg", "manifest.in", "requirements*.txt", "tox.ini",
              "makefile", "pyproject.toml", ".editorconfig", ".pre-commit-config.yaml", "ruff.toml", ".ruff.toml",
              "pyrightconfig.json", ".pylintrc", ".flake8", ".ds_store", "thumbs.db", "desktop.ini", "*.orig", "*.bak",

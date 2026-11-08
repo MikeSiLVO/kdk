@@ -20,3 +20,4 @@ src/kdk/addoncheck/radon/** linguist-vendored
 src/kdk/addoncheck/data/schemas/** linguist-vendored
 src/kdk/addoncheck/data/spdx.json linguist-generated
 src/kdk/addoncheck/data/corestrings.json linguist-generated
+src/kdk/addoncheck/data/jsonrpc.json linguist-generated

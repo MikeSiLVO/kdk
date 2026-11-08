@@ -16,6 +16,7 @@ PREFIXES = {
     "license": "License",
     "art": "Artwork",
     "py": "Python",
+    "api": "Kodi API",
     "kdk": "kdk",
 }
 
@@ -117,6 +118,28 @@ RULES = {
     "art.screenshot-unlisted": (HINT, "A screenshot image <assets> does not list."),
     "py.syntax": (ERROR, "A Python file that is not UTF-8 or does not parse on the branch's oldest Python."),
     "py.entrypoint-complex": (WARNING, "An entry point with 15 or more logical lines."),
+    "py.annotations-floor": (ERROR, "An annotation Python 3.8 evaluates at import that uses list[...] or X | Y."),
+    "py.stdlib-floor": (WARNING, "A standard library name newer than Python 3.8, unguarded."),
+    "py.translatepath": (ERROR, "xbmc.translatePath, gone from Kodi 20; a warning on matrix, where it is "
+                                "deprecated."),
+    "py.removed-api": (ERROR, "A Kodi Python name or argument removed, which raises at run time."),
+    "py.deprecated-logged": (WARNING, "A Kodi Python name that logs a deprecation warning on every call."),
+    "py.deprecated-doc": (HINT, "A Kodi Python name deprecated in Kodi's documentation."),
+    "py.waitforabort-zero": (ERROR, "waitForAbort with a timeout of 0 or less, which waits until Kodi exits."),
+    "py.sleep-loop": (WARNING, "A sleep inside a loop, which does not see Kodi's abort; a hint for a long sleep "
+                               "elsewhere."),
+    "py.print": (WARNING, "A print() call outside a __main__ block."),
+    "py.sys-path": (WARNING, "A change to sys.path."),
+    "py.addon-own-id": (HINT, "xbmcaddon.Addon() given the add-on's own id."),
+    "py.absolute-path": (WARNING, "A path written for one machine."),
+    "py.kodi-files": (WARNING, "A path to Kodi's own files or another add-on's; a hint for Kodi's databases."),
+    "py.requests-timeout": (HINT, "A web request without a timeout."),
+    "py.strptime": (HINT, "datetime.strptime, which can raise TypeError after its first use in Kodi."),
+    "py.vendored-module": (HINT, "Bundled code the Kodi repo ships as a module add-on."),
+    "py.plaintext-key": (WARNING, "A key, secret, token or password written in plain text."),
+    "api.inputstreamaddon": (WARNING, "The inputstreamaddon property, which logs a deprecation on every play."),
+    "api.notification-builtin": (HINT, "A Notification builtin where Dialog().notification() does the job."),
+    "api.jsonrpc-schema": (ERROR, "A literal JSON-RPC call to a method or property the branch does not have."),
     "kdk.check-failed": (ERROR, "A check that crashed, so its results are missing."),
 }
 

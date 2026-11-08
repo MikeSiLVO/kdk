@@ -1,8 +1,26 @@
 """The Python syntax and entry point checks of the add-on checker (kdk-only)."""
 
+import sys
 import unittest
 
 from addons import AddonCase, clean_files
+
+
+class TestNewerSyntax(AddonCase):
+    """Syntax newer than Python 3.8 that the oldest-Python parse lets through."""
+
+    def test_parenthesized_context_managers(self):
+        """Bracketed with items need 3.10; a bracketed expression before as does not."""
+        files = {**clean_files(), "resources/lib/a.py": "with (open('a') as f, open('b') as g):\n    pass\n",
+                 "resources/lib/b.py": "with (open('a')) as f:\n    pass\n"}
+        self.assertEqual([r["subject"] for r in self.rows(files, "py.syntax")], ["resources/lib/a.py"])
+
+    @unittest.skipIf(sys.version_info < (3, 12), "only Python 3.12 tokenizes nested f-string quotes")
+    def test_same_quote_fstring(self):
+        """A string in an f-string reusing its quotes needs 3.12; other quotes are fine."""
+        files = {**clean_files(), "resources/lib/a.py": 'x = f"{d["k"]}"\n',
+                 "resources/lib/b.py": "x = f\"{d['k']}\"\n"}
+        self.assertEqual([r["subject"] for r in self.rows(files, "py.syntax")], ["resources/lib/a.py"])
 
 
 class TestSyntax(AddonCase):
