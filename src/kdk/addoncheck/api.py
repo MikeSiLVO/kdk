@@ -75,7 +75,21 @@ def check(sub: Submission) -> list[dict]:
                 rows += _name_rows(sub, rel, node, names.qualify(node), parents, reported)
             elif isinstance(node, ast.Call):
                 rows += _call_rows(sub, rel, node, names.call(node), names)
-    return rows
+    return [r for r in rows if r["rule"] != "py.deprecated-doc"] + _first_uses(
+        [r for r in rows if r["rule"] == "py.deprecated-doc"])
+
+
+def _first_uses(rows: list[dict]) -> list[dict]:
+    """One row per name: its first use, with the use count when used more than once."""
+    by_name: dict[str, list[dict]] = {}
+    for row in rows:
+        by_name.setdefault(row["subject"], []).append(row)
+    out = []
+    for group in by_name.values():
+        first = min(group, key=lambda r: (r["file"], r["line"]))
+        count = f"; used {len(group)} times, this is the first" if len(group) > 1 else ""
+        out.append({**first, "message": first["message"] + count})
+    return out
 
 
 def _name_rows(sub: Submission, rel: str, node, name: str | None, parents: dict, reported: set) -> list[dict]:

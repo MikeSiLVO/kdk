@@ -76,6 +76,14 @@ class TestDeprecated(AddonCase):
         files = code("ADDON = xbmcaddon.Addon()\nx = ADDON.getSettingBool('a')\n")
         self.assertEqual(self.rules(files, "py.deprecated"), ["py.deprecated-doc"])
 
+    def test_documented_once_per_name(self):
+        """Three uses across two files give one row, at the first use, with the count."""
+        files = {**code("ADDON = xbmcaddon.Addon()\nx = ADDON.getSettingBool('a')\ny = ADDON.getSettingBool('b')\n"),
+                 "resources/lib/other.py": "import xbmcaddon\nz = xbmcaddon.Addon().getSettingBool('c')\n"}
+        rows = self.rows(files, "py.deprecated-doc")
+        self.assertEqual([(r["file"].rsplit("/", 1)[-1], r["line"]) for r in rows], [("main.py", 7)])
+        self.assertIn("used 3 times", rows[0]["message"])
+
 
 class TestCalls(AddonCase):
     """Zero waits, inputstreamaddon, Notification builtins and JSON-RPC payloads."""
