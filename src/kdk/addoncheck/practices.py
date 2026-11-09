@@ -208,7 +208,7 @@ def _main_block(node, parents: dict) -> bool:
 
 
 def _call_rows(sub: Submission, rel: str, node: ast.Call, names: Names, parents: dict, bound: set) -> list[dict]:
-    """Rows for one call: newer names, sleeps, prints, sys.path, own ids, timeouts and strptime."""
+    """Rows for one call: newer features, sleeps, prints, sys.path, own ids, timeouts, strptime."""
     called = names.call(node)
     path, line, rows = sub.abs(rel), node.lineno, []
     keywords = {k.arg for k in node.keywords}
@@ -218,6 +218,13 @@ def _call_rows(sub: Submission, rel: str, node: ast.Call, names: Names, parents:
     if isinstance(node.func, ast.Name) and node.func.id == "zip" and "zip" not in bound and "strict" in keywords \
             and not _guarded(node, parents):
         rows.append(_newer(sub, rel, node, "zip(strict=...)", "3.10"))
+    if isinstance(node.func, ast.Name) and node.func.id in ("isinstance", "issubclass") and \
+            node.func.id not in bound and len(node.args) > 1 and isinstance(node.args[1], ast.BinOp) and \
+            isinstance(node.args[1].op, ast.BitOr):
+        text = ast.unparse(node.args[1])
+        rows.append(finding("py.annotations-floor", path, line, text,
+                            f"{text} in {node.func.id}() raises TypeError on Python 3.8, even with "
+                            f"from __future__ import annotations; pass a tuple instead"))
     if called in ("time.sleep", "xbmc.sleep") and not _after_abort(node, parents):
         value = _number(node.args[0]) if node.args else None
         seconds = None if value is None else value / 1000 if called == "xbmc.sleep" else value

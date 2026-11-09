@@ -29,6 +29,12 @@ class TestFloors(AddonCase):
         self.assertEqual(sorted(r["subject"] for r in self.rows(code(body), "py.stdlib")),
                          [".removeprefix()", "functools.cache", "tomllib", "zip(strict=...)"])
 
+    def test_union_in_isinstance(self):
+        """A union in isinstance fails on 3.8 even with the future import; a tuple does not."""
+        body = "from __future__ import annotations\nok = isinstance(1, int | str)\nfine = isinstance(1, (int, str))\n"
+        rows = self.rows(code(body), "py.annotations")
+        self.assertEqual([(r["subject"], r["severity"]) for r in rows], [("int | str", "error")])
+
 
 class TestHabits(AddonCase):
     """Sleeps, prints, sys.path, own ids, paths, Kodi files, timeouts and strptime."""
