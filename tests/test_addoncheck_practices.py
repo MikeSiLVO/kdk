@@ -61,11 +61,39 @@ class TestHabits(AddonCase):
                          [(4, "warning"), (5, "hint"), (8, "hint")])
 
     def test_bounded_loops(self):
-        """A range loop warns once its sleeps reach a second; a loop over items always warns."""
+        """A range loop warns past 3 s of sleeps, hints from 1 s; a loop over items always warns."""
         body = ("import time\nimport xbmc\nfor i in range(5):\n    xbmc.sleep(30)\nfor i in range(10):\n"
-                "    time.sleep(0.5)\nfor item in items:\n    xbmc.sleep(delay)\n")
+                "    time.sleep(0.5)\nfor item in items:\n    xbmc.sleep(delay)\nfor i in range(30):\n"
+                "    time.sleep(0.1)\n")
+        rows = self.rows(code(body), "py.sleep")
+        self.assertEqual(sorted((r["line"], r["severity"]) for r in rows),
+                         [(6, "warning"), (8, "warning"), (10, "hint")])
+        self.assertIn("up to 3 s in all", rows[-1]["message"])
+
+    def test_clock_bounded_loops(self):
+        """A clock-bounded loop hints up to 3 s, its limit a constant or an unpassed default."""
+        body = ("import time\nimport xbmc\nLIMIT = 2.0\nEXTRA = 1.4\nt0 = time.time()\n"
+                "while time.time() - t0 < LIMIT:\n    xbmc.sleep(50)\n"
+                "while time.time() - t0 < 2.0 + EXTRA:\n    xbmc.sleep(50)\n"
+                "def wait(limit=2.0):\n    while time.monotonic() - t0 < limit:\n        xbmc.sleep(20)\n"
+                "def hold(limit=2.0):\n    while time.monotonic() - t0 < limit:\n        xbmc.sleep(20)\n"
+                "wait()\nhold(9)\n")
         self.assertEqual(sorted((r["line"], r["severity"]) for r in self.rows(code(body), "py.sleep")),
-                         [(6, "warning"), (8, "warning")])
+                         [(7, "hint"), (9, "warning"), (12, "hint"), (15, "warning")])
+
+    def test_loops_polling_abort(self):
+        """Short sleeps in a loop leaving on an abort check pass, a passed-on callable included."""
+        files = {**code("import time\nimport xbmc\nmonitor = xbmc.Monitor()\nwhile not monitor.abortRequested():\n"
+                        "    xbmc.sleep(500)\nwhile not monitor.abortRequested():\n    xbmc.sleep(1000)\n"
+                        "while True:\n    if done():\n        break\n    xbmc.sleep(100)\n"),
+                 "resources/lib/client.py": ("import time\nclass Client:\n    def __init__(self, stopping):\n"
+                                             "        self.stopping = stopping\n    def pause(self, n):\n"
+                                             "        for _ in range(int(n * 10)):\n            if self.stopping():\n"
+                                             "                return\n            time.sleep(0.1)\n"),
+                 "resources/lib/run.py": ("import xbmc\nfrom client import Client\n"
+                                          "c = Client(stopping=xbmc.Monitor().abortRequested)\n")}
+        self.assertEqual(sorted((r["file"].rsplit("/", 1)[-1], r["line"]) for r in self.rows(files, "py.sleep")),
+                         [("main.py", 7), ("main.py", 11)])
 
     def test_sleep_after_abort(self):
         """A sleep that runs only once waitForAbort returned True is left alone, even in a loop."""

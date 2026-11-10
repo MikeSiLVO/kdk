@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import ast
 import re
+from collections import Counter
+from typing import NamedTuple
 
 from lxml import etree as ET
 
@@ -39,12 +41,29 @@ DATABASES = re.compile(r"special://database|special://profile/database|"
 KEY_NAMES = ("api_key", "apikey", "api-key", "client_secret", "secret", "token", "password")
 KEY_VALUE = re.compile(r"^[A-Za-z0-9_-]{16,}$")
 
+LOOPS = (ast.For, ast.AsyncFor, ast.While)
+SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
+ABORT_METHODS = ("waitForAbort", "abortRequested")
+CLOCKS = {"time.time", "time.monotonic", "time.perf_counter"}
+LOOP_WAIT = 3.0
+ABORT_POLL = 0.5
+
+
+class FileScope(NamedTuple):
+    """What the sleep check reads from a whole file, and the abort callables of the add-on."""
+
+    tree: ast.Module
+    names: Names
+    numbers: dict[str, float]
+    stops: set[str]
+
 
 def check(sub: Submission) -> list[dict]:
     """Issue rows for the add-on's own Python, then bundled modules and keys in settings.xml."""
     rows = []
+    stops = _abort_callables(sub)
     for rel, tree in sub.own_code().items():
-        rows += _file_rows(sub, rel, tree)
+        rows += _file_rows(sub, rel, tree, stops)
     names = MODULE_NAMES | {i[len("script.module."):].lower().replace("-", "_")
                             for i in sub.index.ids(sub.release) if i.startswith("script.module.")}
     for root in sub.bundled_roots():
@@ -56,9 +75,10 @@ def check(sub: Submission) -> list[dict]:
     return rows + _settings_key_rows(sub)
 
 
-def _file_rows(sub: Submission, rel: str, tree: ast.Module) -> list[dict]:
+def _file_rows(sub: Submission, rel: str, tree: ast.Module, stops: set[str]) -> list[dict]:
     """Rows for one file of the add-on's own code."""
     names = Names(tree)
+    scope = FileScope(tree, names, _module_numbers(tree), stops)
     parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
     future = any(isinstance(n, ast.ImportFrom) and n.module == "__future__" and
                  any(a.name == "annotations" for a in n.names) for n in tree.body)
@@ -71,7 +91,7 @@ def _file_rows(sub: Submission, rel: str, tree: ast.Module) -> list[dict]:
     rows = [] if future else _annotation_rows(sub, rel, tree)
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
-            rows += _call_rows(sub, rel, node, names, parents, bound)
+            rows += _call_rows(sub, rel, node, names, parents, bound) + _sleep_rows(sub, rel, node, parents, scope)
         elif isinstance(node, (ast.Import, ast.ImportFrom)):
             modules = [a.name for a in node.names] if isinstance(node, ast.Import) else [node.module or ""]
             for module in modules:
@@ -175,41 +195,189 @@ def _sys_path(sub: Submission, rel: str, node) -> dict:
 def _enclosing(node, parents: dict):
     """Yield (child, parent) pairs up from the node to its function, class or module."""
     child, parent = node, parents.get(node)
-    while parent is not None and not isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda,
-                                                         ast.ClassDef)):
+    while parent is not None and not isinstance(parent, SCOPES):
         yield child, parent
         child, parent = parent, parents.get(parent)
 
 
-def _abort_test(test) -> bool:
+def _function_of(node, parents: dict):
+    """The function definition holding the node, or None at module level."""
+    parent = parents.get(node)
+    while parent is not None and not isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        parent = parents.get(parent)
+    return parent
+
+
+def _abort_callables(sub: Submission) -> set[str]:
+    """Names the add-on's code binds or passes an uncalled abortRequested or waitForAbort under."""
+    found = set()
+    for tree in sub.own_code().values():
+        for node in ast.walk(tree):
+            if isinstance(node, ast.keyword) and node.arg and _abort_method(node.value):
+                found.add(node.arg)
+            elif isinstance(node, ast.Assign) and _abort_method(node.value):
+                found.update(t.id if isinstance(t, ast.Name) else t.attr for t in node.targets
+                             if isinstance(t, (ast.Name, ast.Attribute)))
+    return found
+
+
+def _abort_method(node) -> bool:
+    """True for a waitForAbort or abortRequested attribute."""
+    return isinstance(node, ast.Attribute) and node.attr in ABORT_METHODS
+
+
+def _abort_test(test, stops: set[str]) -> bool:
     """True when a condition holds only once Kodi has asked the add-on to stop."""
     if isinstance(test, ast.BoolOp) and isinstance(test.op, ast.And):
-        return any(_abort_test(value) for value in test.values)
-    return isinstance(test, ast.Call) and isinstance(test.func, ast.Attribute) and \
-        test.func.attr in ("waitForAbort", "abortRequested")
+        return any(_abort_test(value, stops) for value in test.values)
+    if not isinstance(test, ast.Call):
+        return False
+    func = test.func
+    return _abort_method(func) or (isinstance(func, ast.Attribute) and func.attr in stops) or \
+        (isinstance(func, ast.Name) and func.id in stops)
 
 
-def _after_abort(node, parents: dict) -> bool:
+def _until_abort(test, stops: set[str]) -> bool:
+    """True when a loop condition turns false once Kodi has asked the add-on to stop."""
+    if isinstance(test, ast.BoolOp) and isinstance(test.op, ast.And):
+        return any(_until_abort(value, stops) for value in test.values)
+    return isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not) and _abort_test(test.operand, stops)
+
+
+def _after_abort(node, parents: dict, stops: set[str]) -> bool:
     """True when the node runs only after an abort check returned True."""
-    return any(isinstance(parent, ast.If) and child in parent.body and _abort_test(parent.test)
+    return any(isinstance(parent, ast.If) and child in parent.body and _abort_test(parent.test, stops)
                for child, parent in _enclosing(node, parents))
 
 
-def _iterations(node, parents: dict) -> float | None:
-    """Iterations of enclosing loops: constant ranges multiplied, else inf; None outside loops."""
-    count, looped = 1.0, False
-    for _, parent in _enclosing(node, parents):
+def _polls_abort(loop, stops: set[str]) -> bool:
+    """True when the loop leaves once an abort check in its own turns returns True."""
+    if isinstance(loop, ast.While) and _until_abort(loop.test, stops):
+        return True
+    stack: list[ast.AST] = list(loop.body)
+    while stack:
+        node = stack.pop()
+        if isinstance(node, ast.If) and _abort_test(node.test, stops) and \
+                any(isinstance(s, (ast.Return, ast.Raise, ast.Break)) for s in node.body):
+            return True
+        if not isinstance(node, LOOPS + SCOPES):
+            stack.extend(ast.iter_child_nodes(node))
+    return False
+
+
+def _range_count(loop, numbers: dict[str, float]) -> int | None:
+    """Turns of a for loop over range() with number arguments; None for any other loop."""
+    it = loop.iter
+    if not (isinstance(it, ast.Call) and isinstance(it.func, ast.Name) and it.func.id == "range" and it.args):
+        return None
+    values = [_value(arg, numbers) for arg in it.args]
+    if any(v is None or v != int(v) for v in values) or (len(values) == 3 and values[2] == 0):
+        return None
+    return len(range(*(int(v) for v in values if v is not None)))
+
+
+def _time_cap(test, names: Names, numbers: dict[str, float]) -> float | None:
+    """Seconds a while condition allows when it compares elapsed clock time with a number."""
+    if isinstance(test, ast.BoolOp) and isinstance(test.op, ast.And):
+        caps = [cap for cap in (_time_cap(value, names, numbers) for value in test.values) if cap is not None]
+        return min(caps) if caps else None
+    if not (isinstance(test, ast.Compare) and len(test.ops) == 1 and isinstance(test.ops[0], (ast.Lt, ast.LtE))):
+        return None
+    left = test.left
+    if isinstance(left, ast.BinOp) and isinstance(left.op, ast.Sub) and isinstance(left.left, ast.Call) and \
+            names.call(left.left) in CLOCKS:
+        return _value(test.comparators[0], numbers)
+    return None
+
+
+def _value(node, numbers: dict[str, float]) -> float | None:
+    """A number expression's value, the names given filled in; None for any other expression."""
+    if isinstance(node, ast.Name):
+        return numbers.get(node.id)
+    if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Sub, ast.Mult)):
+        left, right = _value(node.left, numbers), _value(node.right, numbers)
+        if left is None or right is None:
+            return None
+        return left + right if isinstance(node.op, ast.Add) else left - right if isinstance(node.op, ast.Sub) \
+            else left * right
+    return _number(node)
+
+
+def _module_numbers(tree: ast.Module) -> dict[str, float]:
+    """Module-level names bound once in the file, to a number."""
+    stores = Counter(n.id for n in ast.walk(tree) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store))
+    numbers: dict[str, float] = {}
+    for stmt in tree.body:
+        target, value = (stmt.targets[0], stmt.value) if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1 \
+            else (stmt.target, stmt.value) if isinstance(stmt, ast.AnnAssign) else (None, None)
+        if isinstance(target, ast.Name) and stores[target.id] == 1:
+            found = _value(value, numbers)
+            if found is not None:
+                numbers[target.id] = found
+    return numbers
+
+
+def _unpassed_defaults(function, tree: ast.Module) -> dict[str, float]:
+    """Number defaults of the function's parameters that no call by its name in the file passes."""
+    args = function.args
+    positional = args.posonlyargs + args.args
+    skip = 1 if positional and positional[0].arg in ("self", "cls") else 0
+    pairs = list(zip(positional[len(positional) - len(args.defaults):], args.defaults)) + \
+        [(arg, default) for arg, default in zip(args.kwonlyargs, args.kw_defaults) if default is not None]
+    calls = [c for c in ast.walk(tree) if isinstance(c, ast.Call) and function.name ==
+             (c.func.attr if isinstance(c.func, ast.Attribute) else getattr(c.func, "id", None))]
+    numbers = {}
+    for arg, default in pairs:
+        position = positional.index(arg) - skip if arg in positional else len(positional)
+        value = _number(default)
+        if value is not None and not any(
+                len(c.args) > position or any(isinstance(a, ast.Starred) for a in c.args) or
+                any(k.arg in (arg.arg, None) for k in c.keywords) for c in calls):
+            numbers[arg.arg] = value
+    return numbers
+
+
+def _blocked(node, parents: dict, seconds: float | None, scope: FileScope) -> float | None:
+    """Seconds sleep blocks before next abort check; inf when unbounded, None when unknown."""
+    total = seconds
+    for child, parent in _enclosing(node, parents):
+        if not isinstance(parent, LOOPS) or child not in parent.body:
+            continue
+        if total is not None and total <= ABORT_POLL and _polls_abort(parent, scope.stops):
+            return 0.0
         if isinstance(parent, ast.While):
-            return float("inf")
-        if isinstance(parent, (ast.For, ast.AsyncFor)):
-            looped = True
-            bounds = parent.iter.args if isinstance(parent.iter, ast.Call) and \
-                isinstance(parent.iter.func, ast.Name) and parent.iter.func.id == "range" else None
-            values = [_number(arg) for arg in bounds or []]
-            if not bounds or any(v is None or v != int(v) for v in values):
+            function = _function_of(parent, parents)
+            numbers = {**scope.numbers, **_unpassed_defaults(function, scope.tree)} if function else scope.numbers
+            cap = _time_cap(parent.test, scope.names, numbers)
+            total = float("inf") if cap is None or total is None else max(cap, total)
+        else:
+            count = _range_count(parent, scope.numbers)
+            if count is None:
                 return float("inf")
-            count *= len(range(*(int(v) for v in values if v is not None)))
-    return count if looped else None
+            total = None if total is None else total * count
+    return total
+
+
+def _sleep_rows(sub: Submission, rel: str, node: ast.Call, parents: dict, scope: FileScope) -> list[dict]:
+    """The row for a sleep that blocks a second or more in all without seeing Kodi's abort."""
+    called = scope.names.call(node)
+    if called not in ("time.sleep", "xbmc.sleep") or _after_abort(node, parents, scope.stops):
+        return []
+    value = _number(node.args[0]) if node.args else None
+    seconds = None if value is None else value / 1000 if called == "xbmc.sleep" else value
+    looped = any(isinstance(parent, LOOPS) and child in parent.body for child, parent in _enclosing(node, parents))
+    total = _blocked(node, parents, seconds, scope)
+    total = None if total is None else round(total, 3)
+    if looped and total is not None and total > LOOP_WAIT:
+        return [finding("py.sleep-loop", sub.abs(rel), node.lineno, called,
+                        f"{called} in a loop does not wake when Kodi asks the add-on to stop; use "
+                        f"xbmc.Monitor().waitForAbort() and break when it returns True")]
+    if total is not None and total >= 1:
+        blocks = f"{called} in this loop blocks up to {total:g} s in all" if looped else f"{called} blocks"
+        return [finding("py.sleep-loop", sub.abs(rel), node.lineno, called,
+                        f"{blocks} without seeing Kodi's abort; xbmc.Monitor().waitForAbort() returns early "
+                        f"when Kodi stops", HINT)]
+    return []
 
 
 def _number(node) -> float | None:
@@ -230,7 +398,7 @@ def _main_block(node, parents: dict) -> bool:
 
 
 def _call_rows(sub: Submission, rel: str, node: ast.Call, names: Names, parents: dict, bound: set) -> list[dict]:
-    """Rows for one call: newer features, sleeps, prints, sys.path, own ids, timeouts, strptime."""
+    """Rows for one call: newer features, prints, sys.path, own ids, timeouts, strptime."""
     called = names.call(node)
     path, line, rows = sub.abs(rel), node.lineno, []
     keywords = {k.arg for k in node.keywords}
@@ -247,18 +415,6 @@ def _call_rows(sub: Submission, rel: str, node: ast.Call, names: Names, parents:
         rows += _floor_rows(sub, rel, line, "py.annotations-floor", text, (3, 10),
                             f"{text} in {node.func.id}() raises TypeError on Python 3.8, even with "
                             f"from __future__ import annotations; {fix}", f"{text} in {node.func.id}()", fix)
-    if called in ("time.sleep", "xbmc.sleep") and not _after_abort(node, parents):
-        value = _number(node.args[0]) if node.args else None
-        seconds = None if value is None else value / 1000 if called == "xbmc.sleep" else value
-        runs = _iterations(node, parents)
-        if runs is not None and (runs == float("inf") or (seconds is not None and runs * seconds >= 1)):
-            rows.append(finding("py.sleep-loop", path, line, called,
-                                f"{called} in a loop does not wake when Kodi asks the add-on to stop; use "
-                                f"xbmc.Monitor().waitForAbort() and break when it returns True"))
-        elif runs is None and seconds is not None and seconds >= 1:
-            rows.append(finding("py.sleep-loop", path, line, called,
-                                f"{called} blocks without seeing Kodi's abort; xbmc.Monitor().waitForAbort() "
-                                f"returns early when Kodi stops", HINT))
     if isinstance(node.func, ast.Name) and node.func.id == "print" and "print" not in bound and \
             not _main_block(node, parents):
         target = next((k.value for k in node.keywords if k.arg == "file"), None)
