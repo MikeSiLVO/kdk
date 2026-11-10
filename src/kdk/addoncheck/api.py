@@ -43,6 +43,13 @@ LOGGED = {
 }
 LOGGED_PIERS = {"xbmcgui.ListItem.setAvailableFanart": "InfoTagVideo.setAvailableFanart()"}
 RESUME_KEYS = {"resumetime", "totaltime"}
+VALUE_ONLY = {
+    *(f"xbmc.{name}" for name in ("getCondVisibility", "getInfoLabel", "getInfoImage", "getRegion", "getSkinDir",
+                                  "getLanguage", "getLocalizedString")),
+    *(f"xbmcaddon.Addon.{name}" for name in ("getSetting", "getSettingBool", "getSettingInt", "getSettingNumber",
+                                             "getSettingString", "getAddonInfo", "getLocalizedString")),
+    "xbmcvfs.exists", "xbmcvfs.translatePath", "xbmcgui.Window.getProperty",
+}
 
 # names deprecated in Kodi's documentation from nexus on, without a warning at run time
 DOCUMENTED = {
@@ -75,6 +82,14 @@ def check(sub: Submission) -> list[dict]:
                 rows += _name_rows(sub, rel, node, names.qualify(node), parents, reported)
             elif isinstance(node, ast.Call):
                 rows += _call_rows(sub, rel, node, names.call(node), names)
+            elif isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
+                called, args = names.call(node.value), node.value.args
+                # a bare getCondVisibility on a fixed condition is a wait for the GUI lock
+                waits = called == "xbmc.getCondVisibility" and bool(args) and isinstance(args[0], ast.Constant)
+                if called in VALUE_ONLY and not waits:
+                    rows.append(finding("py.result-discarded", sub.abs(rel), node.lineno, called,
+                                        f"{called}() only returns a value, and this line discards it, so the "
+                                        f"call has no effect"))
     return [r for r in rows if r["rule"] != "py.deprecated-doc"] + _first_uses(
         [r for r in rows if r["rule"] == "py.deprecated-doc"])
 

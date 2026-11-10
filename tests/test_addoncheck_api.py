@@ -94,6 +94,18 @@ class TestCalls(AddonCase):
                 "m.waitForAbort(1)\nm.waitForAbort()\n")
         self.assertEqual(len(self.rows(code(body), "py.waitforabort")), 3)
 
+    def test_result_discarded(self):
+        """A bare call that only returns a value warns; a used value or fixed GUI wait does not."""
+        body = ("def visible(cmd):\n    xbmc.getCondVisibility(cmd)\n"
+                "def shown(cmd):\n    return xbmc.getCondVisibility(cmd)\n"
+                "addon = xbmcaddon.Addon()\naddon.getSetting('a')\nx = addon.getSetting('b')\n"
+                "xbmcgui.Window(10000).getProperty('p')\nxbmc.executebuiltin('Action(Back)')\n"
+                "xbmc.getCondVisibility('Player.HasMedia')\n")
+        rows = self.rows(code(body), "py.result")
+        self.assertEqual(sorted((r["line"], r["subject"]) for r in rows),
+                         [(7, "xbmc.getCondVisibility"), (11, "xbmcaddon.Addon.getSetting"),
+                          (13, "xbmcgui.Window.getProperty")])
+
     def test_inputstreamaddon_and_notification(self):
         """The old property name warns, a Notification builtin is a hint."""
         body = ("li = xbmcgui.ListItem('a')\nli.setProperty('inputstreamaddon', 'inputstream.adaptive')\n"

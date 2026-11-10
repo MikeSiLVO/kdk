@@ -129,6 +129,8 @@ RULES = {
     "py.deprecated-logged": (WARNING, "A Kodi Python name that logs a deprecation warning on every call."),
     "py.deprecated-doc": (HINT, "A Kodi Python name deprecated in Kodi's documentation."),
     "py.waitforabort-zero": (ERROR, "waitForAbort with a timeout of 0 or less, which waits until Kodi exits."),
+    "py.result-discarded": (WARNING, "A bare Kodi call whose value is unused; getCondVisibility only when its "
+                                     "condition is not fixed text."),
     "py.sleep-loop": (WARNING, "Sleeps in a loop that block past 3 s without seeing Kodi's abort; a hint for a "
                                "shorter loop or one long sleep."),
     "py.print": (WARNING, "A print() call outside a __main__ block."),
