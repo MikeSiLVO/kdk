@@ -86,7 +86,7 @@ def _file_rows(sub: Submission, rel: str, tree: ast.Module) -> list[dict]:
             rows += _string_rows(sub, rel, node, parents)
         if isinstance(node, (ast.Assign, ast.AnnAssign, ast.Dict, ast.Call)):
             rows += _key_rows(sub, rel, node)
-    return rows
+    return rows + _kodi_file_rows(sub, rel, tree, names, bound)
 
 
 def _annotation_rows(sub: Submission, rel: str, tree: ast.Module) -> list[dict]:
@@ -286,7 +286,7 @@ def _call_rows(sub: Submission, rel: str, node: ast.Call, names: Names, parents:
 
 
 def _string_rows(sub: Submission, rel: str, node: ast.Constant, parents: dict) -> list[dict]:
-    """Absolute paths, Kodi's files and databases, and other add-ons' files, in a string literal."""
+    """Absolute paths and Kodi's databases named in a string literal."""
     text, path, line, rows = str(node.value), sub.abs(rel), node.lineno, []
     parent = parents.get(node)
     compared = isinstance(parent, ast.Compare) or (
@@ -296,20 +296,92 @@ def _string_rows(sub: Submission, rel: str, node: ast.Constant, parents: dict) -
         rows.append(finding("py.absolute-path", path, line, text[:60],
                             f"{text[:60]} is a path on one machine; build paths from special:// with "
                             f"xbmcvfs.translatePath"))
-    found = KODI_FILES.search(text)
-    other = next((m for m in OTHER_ADDON.finditer(text) if (m.group(1) or m.group(2)) != sub.addon_id), None)
     database = DATABASES.search(text)
-    if found or other:
-        target = found.group(0) if found else other.group(0) if other else ""
-        rows.append(finding("py.kodi-files", path, line, target,
-                            f"{target} belongs to Kodi or another add-on; an add-on writes only its own "
-                            f"addon_data"))
-    elif database:
-        target = database.group(0)
-        rows.append(finding("py.kodi-files", path, line, target,
-                            f"{target} is Kodi's database; reading it directly breaks on MySQL setups and schema "
-                            f"changes, JSON-RPC does not", HINT))
+    if database:
+        rows.append(finding("py.kodi-files", path, line, database.group(0),
+                            f"{database.group(0)} is Kodi's database; reading it directly breaks on MySQL setups "
+                            f"and schema changes, JSON-RPC does not", HINT))
     return rows
+
+
+def _kodi_target(sub: Submission, text: str) -> str | None:
+    """The Kodi file or other add-on's path a string names, or None."""
+    found = KODI_FILES.search(text)
+    if found:
+        return found.group(0)
+    other = next((m for m in OTHER_ADDON.finditer(text) if (m.group(1) or m.group(2)) != sub.addon_id), None)
+    return other.group(0) if other else None
+
+
+def _write_paths(node: ast.Call, names: Names, bound: set) -> list[ast.expr]:
+    """The path arguments a call writes, deletes or creates; empty for any other call."""
+    called = names.call(node) or ""
+    args = node.args
+    mode = next((k.value for k in node.keywords if k.arg == "mode"), args[1] if len(args) > 1 else None)
+    writes = isinstance(mode, ast.Constant) and isinstance(mode.value, str) and bool(set(mode.value) & set("wax+"))
+    if (isinstance(node.func, ast.Name) and node.func.id == "open" and "open" not in bound or called == "io.open") \
+            and writes:
+        return args[:1]
+    if called == "xbmcvfs.File" and writes:
+        return args[:1]
+    if called in ("xbmcvfs.copy", "xbmcvfs.rename", "os.rename", "os.replace", "shutil.copy", "shutil.copy2",
+                  "shutil.copyfile", "shutil.move"):
+        return args[1:2]
+    if called in ("xbmcvfs.delete", "xbmcvfs.rmdir", "xbmcvfs.mkdir", "xbmcvfs.mkdirs", "os.remove", "os.unlink",
+                  "os.mkdir", "os.makedirs", "shutil.rmtree"):
+        return args[:1]
+    return []
+
+
+def _kodi_file_rows(sub: Submission, rel: str, tree: ast.Module, names: Names, bound: set) -> list[dict]:
+    """Kodi files and other add-ons' paths the code writes, deletes or creates, one row per line."""
+    literals = [n for n in ast.walk(tree) if isinstance(n, ast.Constant) and isinstance(n.value, str)
+                and _kodi_target(sub, n.value)]
+    sinks = [path for call in ast.walk(tree) if isinstance(call, ast.Call)
+             for path in _write_paths(call, names, bound)]
+    rows, lines = [], set()
+    for literal in literals:
+        if literal.lineno in lines or not sinks or not _reaches(tree, literal, sinks):
+            continue
+        lines.add(literal.lineno)
+        target = _kodi_target(sub, str(literal.value)) or ""
+        rows.append(finding("py.kodi-files", sub.abs(rel), literal.lineno, target,
+                            f"The add-on changes {target}, which belongs to Kodi or another add-on; an add-on "
+                            f"changes only its own addon_data"))
+    return rows
+
+
+def _reaches(tree: ast.Module, literal: ast.Constant, sinks: list[ast.expr]) -> bool:
+    """True when the string reaches a write path, directly or through names assigned from it."""
+    tainted: set[str] = set()
+
+    def holds(expr) -> bool:
+        return any(n is literal or (isinstance(n, ast.Name) and n.id in tainted) or
+                   (isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name) and n.value.id == "self" and
+                    "." + n.attr in tainted) for n in ast.walk(expr))
+
+    for _ in range(4):
+        before = len(tainted)
+        for node in ast.walk(tree):
+            pairs = []
+            if isinstance(node, ast.Assign):
+                pairs = [(t, node.value) for t in node.targets]
+            elif isinstance(node, (ast.AnnAssign, ast.AugAssign)) and node.value is not None:
+                pairs = [(node.target, node.value)]
+            elif isinstance(node, (ast.For, ast.AsyncFor, ast.comprehension)):
+                pairs = [(node.target, node.iter)]
+            elif isinstance(node, ast.withitem) and node.optional_vars is not None:
+                pairs = [(node.optional_vars, node.context_expr)]
+            for target, value in pairs:
+                if holds(value):
+                    for n in ast.walk(target):
+                        if isinstance(n, ast.Name):
+                            tainted.add(n.id)
+                        elif isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name) and n.value.id == "self":
+                            tainted.add("." + n.attr)
+        if len(tainted) == before:
+            break
+    return any(holds(sink) for sink in sinks)
 
 
 def _key_name(name: str | None) -> bool:

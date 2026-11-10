@@ -81,14 +81,24 @@ class TestHabits(AddonCase):
         self.assertEqual(self.rules(code(body), "py."), ["py.print", "py.sys-path", "py.sys-path"])
 
     def test_own_id_paths_and_kodi_files(self):
-        """Own id, a home path, other add-on data and a database get rows; comparisons do not."""
+        """Own id, home path, other add-on writes and databases get rows; comparisons do not."""
         body = ("import xbmcaddon\na = xbmcaddon.Addon('script.test')\nb = xbmcaddon.Addon('script.other')\n"
                 "p = '/home/me/file.txt'\nok = p.startswith('/storage/')\n"
-                "q = 'special://profile/addon_data/script.other/settings.xml'\n"
-                "r = 'special://profile/addon_data/script.test/cache'\ndb = 'MyVideos131.db'\n")
+                "q = 'special://profile/addon_data/script.other/settings.xml'\nopen(q, 'w').write('x')\n"
+                "r = 'special://profile/addon_data/script.test/cache'\nopen(r, 'w')\ndb = 'MyVideos131.db'\n")
         self.assertEqual(sorted((r["rule"], r["severity"]) for r in self.rows(code(body), "py.")),
                          [("py.absolute-path", "warning"), ("py.addon-own-id", "hint"),
                           ("py.kodi-files", "hint"), ("py.kodi-files", "warning")])
+
+    def test_kodi_files_only_when_written(self):
+        """Reading advancedsettings.xml or logging its name gives nothing; writing a keymap does."""
+        body = ("import xbmc\nimport xbmcvfs\nfrom xml.etree import ElementTree\n"
+                "PATHS = ('special://profile/advancedsettings.xml', 'special://masterprofile/advancedsettings.xml')\n"
+                "for name in PATHS:\n    root = ElementTree.parse(xbmcvfs.translatePath(name))\n"
+                "xbmc.log('Found and parsed advancedsettings.xml')\n"
+                "KEYMAP = 'special://profile/keymaps/mine.xml'\nf = xbmcvfs.File(KEYMAP, 'w')\n")
+        rows = self.rows(code(body), "py.kodi-files")
+        self.assertEqual([(r["line"], r["subject"]) for r in rows], [(8, "special://profile/keymaps")])
 
     def test_timeouts_and_strptime(self):
         """Requests without a timeout, also on a session, and strptime are hints."""

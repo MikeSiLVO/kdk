@@ -135,7 +135,7 @@ RULES = {
     "py.sys-path": (WARNING, "A change to sys.path."),
     "py.addon-own-id": (HINT, "xbmcaddon.Addon() given the add-on's own id."),
     "py.absolute-path": (WARNING, "A path written for one machine."),
-    "py.kodi-files": (WARNING, "A path to Kodi's own files or another add-on's; a hint for Kodi's databases."),
+    "py.kodi-files": (WARNING, "A write to Kodi's own files or another add-on's; a hint for Kodi's databases."),
     "py.requests-timeout": (HINT, "A web request without a timeout."),
     "py.strptime": (HINT, "datetime.strptime, which can raise TypeError after its first use in Kodi."),
     "py.vendored-module": (HINT, "Bundled code the Kodi repo ships as a module add-on."),
