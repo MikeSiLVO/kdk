@@ -193,7 +193,7 @@ def check(sub: Submission) -> list[dict]:
 
 
 def _ui_text(node: ast.AST, name: str, provider: str) -> str | None:
-    """Literal text with a letter outside tokens, unless add-on name, provider, URL or path."""
+    """Literal text holding a word not in capitals, unless add-on name, provider, URL or path."""
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         text = node.value
     elif isinstance(node, ast.JoinedStr):
@@ -202,7 +202,8 @@ def _ui_text(node: ast.AST, name: str, provider: str) -> str | None:
         return None
     bare, stripped = _NOT_WORDS.sub("", text), text.strip()
     product = stripped == provider or bool(stripped and re.search(rf"(?<!\w){re.escape(stripped)}(?!\w)", name))
-    if not re.search(r"[^\W\d_]", bare) or product or "://" in text or text.startswith("/"):
+    words = [run for run in re.findall(r"[^\W\d_]{2,}", bare) if not run.isupper()]
+    if not words or product or "://" in text or text.startswith("/"):
         return None
     return text
 
@@ -246,7 +247,7 @@ def _settings_text_rows(sub: Submission) -> list[dict]:
         return []
     rows = []
     for node in root.iter():
-        if not isinstance(node.tag, str):
+        if not isinstance(node.tag, str) or node.tag == "setting" and _hidden(node):
             continue
         # an option's label is a fixed value such as a language's own name
         values = [node.get("help")] + ([node.get("label")] if node.tag != "option" else [])
@@ -257,3 +258,9 @@ def _settings_text_rows(sub: Submission) -> list[dict]:
                 rows.append(finding("strings.hardcoded-ui", sub.abs(rel), node.sourceline or 0, value[:60],
                                     f"\"{value[:60]}\" in settings.xml is shown untranslated; use a string id"))
     return rows
+
+
+def _hidden(setting) -> bool:
+    """True when a setting is never shown, by its visible attribute or its <visible> element."""
+    return (setting.get("visible") or "").strip().lower() == "false" or \
+        any((child.text or "").strip().lower() == "false" for child in setting if child.tag == "visible")

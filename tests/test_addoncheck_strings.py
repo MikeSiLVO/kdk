@@ -110,20 +110,26 @@ class TestHardcoded(AddonCase):
                          ["Done", "Mark as unwatched?"])
 
     def test_not_ui_text(self):
-        """The add-on name, format-only strings, markup, URLs and logging are left alone."""
+        """The add-on name, placeholders, markup, URLs, capitals, one letter and logging pass."""
         body = ('xbmcgui.Dialog().ok("Test", "%s [CR]")\n'
-                'xbmcgui.Dialog().ok("https://example.org", "{} - {}")\nxbmc.log("Starting up")\n')
+                'xbmcgui.Dialog().ok("https://example.org", "{} - {}")\nxbmc.log("Starting up")\n'
+                'xbmcgui.Dialog().textviewer(f"JSON-RPC: {method}", "X")\n')
         self.assertEqual(self.rules(code(body), "strings.hardcoded"), [])
 
     def test_settings_text(self):
-        """A settings label written as text warns; an option's label does not."""
+        """A settings label written as text warns; one on an option or hidden setting does not."""
         files = clean_files()
         files["resources/settings.xml"] = ('<settings version="1"><section id="script.test">'
                                            '<category id="general" label="Volume"><group id="1">'
                                            '<setting id="lang" type="string" label="32000"><constraints><options>'
-                                           '<option label="Deutsch">de</option></options></constraints>'
-                                           '</setting></group></category></section></settings>')
+                                           '<option label="Deutsch">de</option></options></constraints></setting>'
+                                           '<setting id="token" type="string" label="Token"><visible>false'
+                                           '</visible></setting></group></category></section></settings>')
         self.assertEqual([r["subject"] for r in self.rows(files, "strings.hardcoded")], ["Volume"])
+        files["resources/settings.xml"] = ('<settings><category label="32000"><setting id="token" type="text" '
+                                           'label="API Token" visible="false"/><setting id="user" type="text" '
+                                           'label="User"/></category></settings>')
+        self.assertEqual([r["subject"] for r in self.rows(files, "strings.hardcoded")], ["User"])
 
 
 if __name__ == "__main__":
