@@ -2,7 +2,7 @@
 
 import unittest
 
-from addons import AddonCase, clean_files
+from addons import AddonCase, addon_xml, clean_files
 
 
 def code(body: str) -> dict:
@@ -117,6 +117,15 @@ class TestHabits(AddonCase):
         self.assertEqual(sorted((r["rule"], r["severity"]) for r in self.rows(code(body), "py.")),
                          [("py.absolute-path", "warning"), ("py.addon-own-id", "hint"),
                           ("py.kodi-files", "hint"), ("py.kodi-files", "warning")])
+
+    def test_own_id_in_a_module(self):
+        """A module add-on naming its own id gets no row, since Addon() there is the importer."""
+        xml = addon_xml("script.module.foo").replace(
+            '<extension point="xbmc.python.script" library="default.py"/>',
+            '<extension point="xbmc.python.module" library="lib"/>')
+        files = {**clean_files("script.module.foo"), "addon.xml": xml,
+                 "lib/foo/__init__.py": "import xbmcaddon\nv = xbmcaddon.Addon(id='script.module.foo')\n"}
+        self.assertEqual(self.rules(files, "py.addon-own-id"), [])
 
     def test_kodi_files_only_when_written(self):
         """Reading advancedsettings.xml or logging its name gives nothing; writing a keymap does."""

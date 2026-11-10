@@ -425,7 +425,10 @@ def _call_rows(sub: Submission, rel: str, node: ast.Call, names: Names, parents:
         rows.append(_sys_path(sub, rel, node))
     if called == "xbmcaddon.Addon":
         given = node.args[0] if node.args else next((k.value for k in node.keywords if k.arg == "id"), None)
-        if isinstance(given, ast.Constant) and given.value == sub.addon_id:
+        # in a module add-on, Addon() without an id is the add-on importing it
+        module = sub.root is not None and any(e.get("point") == "xbmc.python.module"
+                                              for e in sub.root.findall("extension"))
+        if isinstance(given, ast.Constant) and given.value == sub.addon_id and not module:
             rows.append(finding("py.addon-own-id", path, line, sub.addon_id,
                                 "xbmcaddon.Addon() finds its own id; the id is needed only when the code runs "
                                 "through RunScript by path", HINT))
