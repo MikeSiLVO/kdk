@@ -39,12 +39,20 @@ class TestVersion(AddonCase):
         self.assertEqual(self.rules(clean_files(version="1.0.0+matrix.1"), "addon.version"), [])
         self.assertEqual(self.rules(clean_files(version="1.0.0~beta1"), "addon.version"), [])
 
-    def test_not_higher_than_this_or_an_older_branch(self):
-        """Equal to omega's copy and below leia's copy: one row per branch."""
+    def test_not_higher_than_this_branch(self):
+        """Equal to omega's own copy: one row naming omega."""
         self.write_index("omega", index_entry("script.test", "1.0.0"))
-        self.write_index("leia", index_entry("script.test", "2.0.0"))
         rows = self.rows(clean_files(), "addon.version-not-higher")
-        self.assertEqual(sorted(r["subject"] for r in rows), ["leia", "omega"])
+        self.assertEqual([r["subject"] for r in rows], ["omega"])
+        self.assertIn("users on Omega never get this update", rows[0]["message"])
+
+    def test_not_higher_than_a_fallback_copy(self):
+        """Below leia's copy, which omega's list carries: one row naming leia and the fallback."""
+        self.write_index("leia", index_entry("script.test", "2.0.0"))
+        self.write_index("omega", index_entry("script.test", "1.0.0"), index_entry("script.test", "2.0.0"))
+        rows = self.rows(clean_files(), "addon.version-not-higher")
+        self.assertEqual([r["subject"] for r in rows], ["leia"])
+        self.assertIn("which Omega users get through fallback", rows[0]["message"])
 
     def test_beta_counts_below_its_release(self):
         """1.0.0~beta1 on the branch is below 1.0.0."""

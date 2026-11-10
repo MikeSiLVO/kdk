@@ -101,14 +101,18 @@ def _version_rows(sub: Submission, root) -> list[dict]:
         sub.notices.append(f"Version {version} is not a PEP 440 version, so it was not compared with the "
                            f"versions the branches hold")
         return rows
-    for branch in BRANCHES[:BRANCHES.index(sub.release) + 1]:
-        held = sub.index.highest(branch, sub.addon_id)
-        held_parsed = versions.parse(held)
-        if held_parsed is not None and parsed <= held_parsed:
-            name = display(branch)
-            rows.append(finding("addon.version-not-higher", sub.xml_path, root.sourceline, branch,
-                                f"{name} already holds version {held}, not below this {version}, so users on "
-                                f"{name} never get this update"))
+    held = sub.index.highest(sub.release, sub.addon_id)
+    held_parsed = versions.parse(held)
+    if held_parsed is not None and parsed <= held_parsed:
+        # the oldest branch holding the held version is its origin
+        source = next((b for b in BRANCHES[:BRANCHES.index(sub.release)]
+                       if versions.parse(sub.index.highest(b, sub.addon_id)) == held_parsed), sub.release)
+        name = display(source)
+        rows.append(finding("addon.version-not-higher", sub.xml_path, root.sourceline, source,
+                            f"{name} already holds version {held}, not below this {version}, so users on {name} "
+                            f"never get this update" if source == sub.release else
+                            f"{name} already holds version {held}, which {display(sub.release)} users get through "
+                            f"fallback; this copy needs a version above {held} to replace it"))
     for branch in higher(sub.release):
         held = sub.index.highest(branch, sub.addon_id)
         held_parsed = versions.parse(held)
