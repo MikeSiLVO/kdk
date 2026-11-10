@@ -10,8 +10,8 @@ import tokenize
 import warnings
 
 from .radon.raw import analyze
-from .releases import PYTHON_FLOOR
-from .rules import finding
+from .releases import PACKAGED_PYTHON, PYTHON_FLOOR, python_level, python_reason
+from .rules import HINT, finding
 from .submission import Submission
 
 # logical lines from which the Kodi repo's checker calls an entry point complex
@@ -38,9 +38,19 @@ def check(sub: Submission) -> list[dict]:
             continue
         problem = _parse_problem(source) or _newer_syntax(source)
         if problem:
-            line, message = problem
-            rows.append(finding("py.syntax", sub.abs(rel), line, rel, f"{rel} does not parse: {message}"))
-            continue
+            line, message, needed = problem
+            level = python_level(sub.release, needed) if needed else "fail"
+            if needed is None:
+                rows.append(finding("py.syntax", sub.abs(rel), line, rel, f"{rel} does not parse: {message}"))
+                continue
+            if level and sub.release not in PACKAGED_PYTHON:
+                rows.append(finding("py.syntax", sub.abs(rel), line, rel,
+                                    f"{rel} does not parse on Python 3.8: {message}"))
+                continue
+            if level:
+                rows.append(finding("py.syntax", sub.abs(rel), line, rel,
+                                    f"{rel} needs Python {needed[0]}.{needed[1]}: {message}; "
+                                    f"{python_reason(sub.release, needed)}", HINT if level == "hint" else None))
         sources[rel] = source
     if sub.root is None or sub.broken:
         return rows
@@ -59,32 +69,43 @@ def check(sub: Submission) -> list[dict]:
     return rows
 
 
-def _parse_problem(source: str) -> tuple[int, str] | None:
-    """Line and message when the source fails on the oldest or the running Python, else None."""
-    for version in (PYTHON_FLOOR, None):
+def _parse_problem(source: str) -> tuple[int, str, tuple[int, int] | None] | None:
+    """Line, message and oldest Python that parses the source, None for none; None when 3.8 does."""
+    try:
+        _parse(source, None)
+    except SyntaxError as e:
+        return e.lineno or 0, e.msg, None
+    except ValueError as e:
+        return 0, str(e), None
+    failed = None
+    for minor in range(PYTHON_FLOOR[1], sys.version_info[1] + 1):
         try:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                if version:
-                    ast.parse(source, feature_version=version)
-                else:
-                    ast.parse(source)
-        except SyntaxError as e:
-            where = f" on Python {version[0]}.{version[1]}" if version else ""
-            return e.lineno or 0, f"{e.msg}{where}"
-        except ValueError as e:
-            return 0, str(e)
+            _parse(source, (3, minor))
+        except (SyntaxError, ValueError) as e:
+            failed = e
+            continue
+        if failed is None:
+            return None
+        return getattr(failed, "lineno", 0) or 0, getattr(failed, "msg", str(failed)), (3, minor)
     return None
 
 
-def _newer_syntax(source: str) -> tuple[int, str] | None:
-    """Line and message for syntax newer than 3.8 that the oldest-Python parse lets through."""
+def _parse(source: str, version: tuple[int, int] | None) -> ast.Module:
+    """Parse the source with the grammar of the Python version given, or of the running one."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return ast.parse(source, feature_version=version) if version else ast.parse(source)
+
+
+def _newer_syntax(source: str) -> tuple[int, str, tuple[int, int]] | None:
+    """Line, message and needed Python for newer syntax the grammar-version parse lets through."""
     tree = ast.parse(source)
     lines = source.splitlines()
     for node in ast.walk(tree):
         if isinstance(node, (ast.With, ast.AsyncWith)) and _parenthesized(lines, node):
-            return node.lineno, "context managers in parentheses need Python 3.10"
-    return _same_quote_fstring(source)
+            return node.lineno, "context managers in parentheses need Python 3.10", (3, 10)
+    found = _same_quote_fstring(source)
+    return (*found, (3, 12)) if found else None
 
 
 def _after_string(text: str, i: int) -> int:

@@ -8,7 +8,8 @@ import re
 from lxml import etree as ET
 
 from .names import Names
-from .rules import HINT, finding
+from .releases import PACKAGED_PYTHON, python_level, python_reason
+from .rules import ERROR, HINT, finding
 from .submission import MODULE_NAMES, PARSER, Submission
 
 BUILTIN_GENERICS = {"list", "dict", "tuple", "set", "frozenset", "type"}
@@ -17,9 +18,11 @@ BUILTIN_GENERICS = {"list", "dict", "tuple", "set", "frozenset", "type"}
 NEWER_NAMES = {
     "functools.cache": "3.9", "math.lcm": "3.9", "random.randbytes": "3.9", "itertools.pairwise": "3.10",
     "asyncio.TaskGroup": "3.11", "datetime.UTC": "3.11", "itertools.batched": "3.12",
+    "warnings.deprecated": "3.13", "copy.replace": "3.13",
 }
 NEWER_METHODS = {"removeprefix": "3.9", "removesuffix": "3.9", "bit_count": "3.10"}
-NEWER_MODULES = {"zoneinfo": "3.9", "graphlib": "3.9", "tomllib": "3.11"}
+NEWER_MODULES = {"zoneinfo": "3.9", "graphlib": "3.9", "tomllib": "3.11", "annotationlib": "3.14",
+                 "string.templatelib": "3.14", "compression": "3.14", "concurrent.interpreters": "3.14"}
 NEWER_BUILTINS = {"aiter": "3.10", "anext": "3.10", "ExceptionGroup": "3.11"}
 GUARD_ERRORS = {"ImportError", "ModuleNotFoundError", "AttributeError", "NameError", "Exception", "BaseException"}
 
@@ -72,9 +75,9 @@ def _file_rows(sub: Submission, rel: str, tree: ast.Module) -> list[dict]:
         elif isinstance(node, (ast.Import, ast.ImportFrom)):
             modules = [a.name for a in node.names] if isinstance(node, ast.Import) else [node.module or ""]
             for module in modules:
-                version = NEWER_MODULES.get(module.split(".")[0])
+                version = NEWER_MODULES.get(module) or NEWER_MODULES.get(module.split(".")[0])
                 if version and not _guarded(node, parents):
-                    rows.append(_newer(sub, rel, node, module, version))
+                    rows += _newer(sub, rel, node, module, version)
         elif isinstance(node, (ast.Attribute, ast.Name)) and isinstance(node.ctx, ast.Load):
             rows += _name_rows(sub, rel, node, names, parents, bound)
         elif isinstance(node, ast.AugAssign) and names.qualify(node.target) == "sys.path":
@@ -87,7 +90,7 @@ def _file_rows(sub: Submission, rel: str, tree: ast.Module) -> list[dict]:
 
 
 def _annotation_rows(sub: Submission, rel: str, tree: ast.Module) -> list[dict]:
-    """Annotations Python 3.8 evaluates at import that use list[...] or X | Y."""
+    """Annotations evaluated at import that use list[...] or X | Y past the branch's floor."""
     annotations = []
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -103,11 +106,16 @@ def _annotation_rows(sub: Submission, rel: str, tree: ast.Module) -> list[dict]:
                 node.value.id in BUILTIN_GENERICS
             union = isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr)
             if generic or union:
-                text = ast.unparse(node)
-                rows.append(finding("py.annotations-floor", sub.abs(rel), getattr(node, "lineno", 0), text,
-                                    f"The annotation {text} raises TypeError on Python 3.8 when the module loads; "
-                                    f"add from __future__ import annotations or use the typing names"))
                 break
+        else:
+            continue
+        # an inner union still needs 3.10 when an outer generic came first
+        needed = (3, 10) if any(isinstance(n, ast.BinOp) and isinstance(n.op, ast.BitOr)
+                                for n in ast.walk(annotation)) else (3, 9)
+        text, fix = ast.unparse(node), "add from __future__ import annotations or use the typing names"
+        rows += _floor_rows(sub, rel, getattr(node, "lineno", 0), "py.annotations-floor", text, needed,
+                            f"The annotation {text} raises TypeError on Python 3.8 when the module loads; {fix}",
+                            f"The annotation {text}", fix)
     return rows
 
 
@@ -126,21 +134,35 @@ def _guarded(node, parents: dict) -> bool:
     return False
 
 
-def _newer(sub: Submission, rel: str, node, what: str, version: str) -> dict:
-    """The row for a standard library name newer than Python 3.8."""
-    return finding("py.stdlib-floor", sub.abs(rel), node.lineno, what,
-                   f"{what} needs Python {version}, and Kodi on this branch can run Python 3.8; guard it or use an "
-                   f"older equivalent")
+def _floor_rows(sub: Submission, rel: str, line: int, rule: str, subject: str, needed: tuple[int, int],
+                firm: str, what: str, fix: str) -> list[dict]:
+    """Row for code needing a Python past the branch's floor, at the level the branch gives it."""
+    level = python_level(sub.release, needed)
+    if level is None:
+        return []
+    if sub.release not in PACKAGED_PYTHON:
+        return [finding(rule, sub.abs(rel), line, subject, firm)]
+    return [finding(rule, sub.abs(rel), line, subject,
+                    f"{what} needs Python {needed[0]}.{needed[1]}; {python_reason(sub.release, needed)}; {fix}",
+                    HINT if level == "hint" else ERROR)]
+
+
+def _newer(sub: Submission, rel: str, node, what: str, version: str) -> list[dict]:
+    """The row for a standard library feature newer than the branch's Python floor."""
+    major, minor = (int(part) for part in version.split("."))
+    fix = "guard it or use an older equivalent"
+    return _floor_rows(sub, rel, node.lineno, "py.stdlib-floor", what, (major, minor),
+                       f"{what} needs Python {version}, and Kodi on this branch can run Python 3.8; {fix}", what, fix)
 
 
 def _name_rows(sub: Submission, rel: str, node, names: Names, parents: dict, bound: set) -> list[dict]:
-    """Standard library names and builtins newer than Python 3.8."""
-    if isinstance(node, ast.Name):
-        version = NEWER_BUILTINS.get(node.id) if node.id not in bound else None
-        return [_newer(sub, rel, node, node.id, version)] if version and not _guarded(node, parents) else []
+    """Standard library names and builtins newer than the branch's Python floor."""
+    if isinstance(node, ast.Name) and node.id in NEWER_BUILTINS:
+        version = NEWER_BUILTINS[node.id] if node.id not in bound else None
+        return _newer(sub, rel, node, node.id, version) if version and not _guarded(node, parents) else []
     name = names.qualify(node)
     version = NEWER_NAMES.get(name or "")
-    return [_newer(sub, rel, node, name or "", version)] if version and not _guarded(node, parents) else []
+    return _newer(sub, rel, node, name or "", version) if version and not _guarded(node, parents) else []
 
 
 def _sys_path(sub: Submission, rel: str, node) -> dict:
@@ -214,17 +236,17 @@ def _call_rows(sub: Submission, rel: str, node: ast.Call, names: Names, parents:
     keywords = {k.arg for k in node.keywords}
     method = node.func.attr if isinstance(node.func, ast.Attribute) else ""
     if method in NEWER_METHODS and not _guarded(node, parents):
-        rows.append(_newer(sub, rel, node, f".{method}()", NEWER_METHODS[method]))
+        rows += _newer(sub, rel, node, f".{method}()", NEWER_METHODS[method])
     if isinstance(node.func, ast.Name) and node.func.id == "zip" and "zip" not in bound and "strict" in keywords \
             and not _guarded(node, parents):
-        rows.append(_newer(sub, rel, node, "zip(strict=...)", "3.10"))
+        rows += _newer(sub, rel, node, "zip(strict=...)", "3.10")
     if isinstance(node.func, ast.Name) and node.func.id in ("isinstance", "issubclass") and \
             node.func.id not in bound and len(node.args) > 1 and isinstance(node.args[1], ast.BinOp) and \
             isinstance(node.args[1].op, ast.BitOr):
-        text = ast.unparse(node.args[1])
-        rows.append(finding("py.annotations-floor", path, line, text,
+        text, fix = ast.unparse(node.args[1]), "pass a tuple instead"
+        rows += _floor_rows(sub, rel, line, "py.annotations-floor", text, (3, 10),
                             f"{text} in {node.func.id}() raises TypeError on Python 3.8, even with "
-                            f"from __future__ import annotations; pass a tuple instead"))
+                            f"from __future__ import annotations; {fix}", f"{text} in {node.func.id}()", fix)
     if called in ("time.sleep", "xbmc.sleep") and not _after_abort(node, parents):
         value = _number(node.args[0]) if node.args else None
         seconds = None if value is None else value / 1000 if called == "xbmc.sleep" else value

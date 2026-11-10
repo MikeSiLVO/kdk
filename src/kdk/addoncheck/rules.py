@@ -116,10 +116,13 @@ RULES = {
     "art.no-icon": (WARNING, "No icon."),
     "art.no-fanart": (WARNING, "No fanart."),
     "art.screenshot-unlisted": (HINT, "A screenshot image <assets> does not list."),
-    "py.syntax": (ERROR, "A Python file that is not UTF-8 or does not parse on the branch's oldest Python."),
+    "py.syntax": (ERROR, "A Python file that is not UTF-8 or does not parse on the branch's oldest Python; on "
+                         "piers a hint for 3.10 to 3.13 syntax."),
     "py.entrypoint-complex": (WARNING, "An entry point with 15 or more logical lines."),
-    "py.annotations-floor": (ERROR, "An annotation Python 3.8 evaluates at import that uses list[...] or X | Y."),
-    "py.stdlib-floor": (WARNING, "A standard library name newer than Python 3.8, unguarded."),
+    "py.annotations-floor": (ERROR, "An annotation evaluated at import using list[...] or X | Y, or a union in "
+                                    "isinstance; on piers list[...] passes and X | Y is a hint."),
+    "py.stdlib-floor": (WARNING, "A standard library name newer than Python 3.8, unguarded; on piers 3.9 names "
+                                 "pass, 3.10 to 3.13 hint, newer ones are errors."),
     "py.translatepath": (ERROR, "xbmc.translatePath, gone from Kodi 20; a warning on matrix, where it is "
                                 "deprecated."),
     "py.removed-api": (ERROR, "A Kodi Python name or argument removed, which raises at run time."),

@@ -26,6 +26,7 @@ def emitted_ids() -> set[str]:
         text = path.read_text(encoding="utf-8")
         found |= set(re.findall(r'finding\(\s*"([a-z]+\.[a-z0-9-]+)"', text))
         found |= set(re.findall(r'"repo\.[a-z-]+": "([a-z]+\.[a-z0-9-]+)"', text))
+        found |= set(re.findall(r'_floor_rows\([^\n]*"(py\.[a-z0-9-]+)"', text))
         found |= {f"art.no-{kind}" for kind in ("icon", "fanart") if 'f"art.no-{kind}"' in text}
     return found
 

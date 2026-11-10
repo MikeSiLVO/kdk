@@ -35,6 +35,20 @@ class TestFloors(AddonCase):
         rows = self.rows(code(body), "py.annotations")
         self.assertEqual([(r["subject"], r["severity"]) for r in rows], [("int | str", "error")])
 
+    def test_levels_on_piers(self):
+        """On piers 3.9 names and generics pass, 3.10 to 3.13 hint, 3.14 fails; omega warns."""
+        body = ("import itertools\nimport annotationlib\nfrom warnings import deprecated\n"
+                "def f(a: list[int], b: dict[str, int | None]) -> None:\n    return None\n"
+                "s = 'ab'.removeprefix('a')\np = itertools.pairwise([1, 2])\n@deprecated('x')\ndef g():\n    pass\n")
+        rows = self.rows(code(body), "py.", release="piers")
+        self.assertEqual(sorted((r["subject"], r["severity"]) for r in rows),
+                         [("annotationlib", "error"), ("dict[str, int | None]", "hint"),
+                          ("itertools.pairwise", "hint"), ("warnings.deprecated", "hint")])
+        self.assertIn("Debian 12 has 3.11", next(r["message"] for r in rows if r["subject"] == "warnings.deprecated"))
+        omega = self.rows(code(body), "py.stdlib")
+        self.assertEqual({r["severity"] for r in omega}, {"warning"})
+        self.assertEqual(len(omega), 4)
+
 
 class TestHabits(AddonCase):
     """Sleeps, prints, sys.path, own ids, paths, Kodi files, timeouts and strptime."""

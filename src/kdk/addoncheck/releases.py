@@ -12,6 +12,32 @@ TARGETS = BRANCHES[BRANCHES.index("matrix"):]
 
 PYTHON_FLOOR = (3, 8)
 
+# newest Python every build of the branch has; code needing more fails on some of them
+PYTHON_FLOORS = {"matrix": (3, 8), "nexus": (3, 8), "omega": (3, 8), "piers": (3, 9)}
+
+# oldest Python packaged builds of the branch run; between floor and this only source builds break
+PACKAGED_PYTHON = {"piers": (3, 13)}
+
+# Python of the LTS distros a Kodi 22 source build takes its Python from
+LTS_PYTHON = (("RHEL 9", (3, 9)), ("Ubuntu 22.04", (3, 10)), ("Debian 12", (3, 11)), ("Ubuntu 24.04", (3, 12)))
+
+
+def python_level(branch: str, needed: tuple[int, int]) -> str | None:
+    """How bad needing the Python version is on the branch: None, "hint" or "fail"."""
+    if needed <= PYTHON_FLOORS[branch]:
+        return None
+    packaged = PACKAGED_PYTHON.get(branch)
+    return "hint" if packaged and needed <= packaged else "fail"
+
+
+def python_reason(branch: str, needed: tuple[int, int]) -> str:
+    """Why code needing the Python version breaks on a branch with packaged builds, as a clause."""
+    packaged = PACKAGED_PYTHON[branch]
+    if needed <= packaged:
+        older = ", ".join(f"{name} has {v[0]}.{v[1]}" for name, v in LTS_PYTHON if v < needed)
+        return f"it breaks only source builds of Kodi 22 on older LTS distros ({older})"
+    return f"packaged builds of Kodi 22 start at Python {packaged[0]}.{packaged[1]}"
+
 
 class Abi(NamedTuple):
     """One core add-on on one branch: oldest import accepted, first shipped, advised."""

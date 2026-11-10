@@ -6,6 +6,34 @@ import unittest
 from addons import AddonCase, clean_files
 
 
+class TestPiersFloor(AddonCase):
+    """Piers syntax levels: 3.10 to 3.13 hint, newer fails; omega keeps the 3.8 floor."""
+
+    def test_levels_on_piers(self):
+        """A 3.10 match and bracketed with items are hints on piers and errors on omega."""
+        files = {**clean_files(), "resources/lib/b.py": "match x:\n    case 1:\n        pass\n",
+                 "resources/lib/c.py": "with (open('a') as f, open('b') as g):\n    pass\n"}
+        rows = self.rows(files, "py.syntax", release="piers")
+        self.assertEqual([(r["subject"], r["severity"]) for r in rows],
+                         [("resources/lib/b.py", "hint"), ("resources/lib/c.py", "hint")])
+        self.assertIn("RHEL 9 has 3.9", rows[0]["message"])
+        self.assertNotIn("Ubuntu 22.04", rows[0]["message"])
+        self.assertEqual([r["severity"] for r in self.rows(files, "py.syntax")], ["error", "error"])
+
+    @unittest.skipIf(sys.version_info < (3, 14), "only Python 3.14 parses template strings")
+    def test_newer_than_packaged_fails_on_piers(self):
+        """A 3.14 template string is an error on piers."""
+        files = {**clean_files(), "resources/lib/t.py": "x = t'hi {name}'\n"}
+        rows = self.rows(files, "py.syntax", release="piers")
+        self.assertEqual([r["severity"] for r in rows], ["error"])
+        self.assertIn("3.13", rows[0]["message"])
+
+    def test_broken_code_stays_an_error_on_piers(self):
+        """Code the running Python cannot parse either is an error on piers too."""
+        files = {**clean_files(), "resources/lib/old.py": "print 'hi'\n"}
+        self.assertEqual([r["severity"] for r in self.rows(files, "py.syntax", release="piers")], ["error"])
+
+
 class TestNewerSyntax(AddonCase):
     """Syntax newer than Python 3.8 that the oldest-Python parse lets through."""
 
