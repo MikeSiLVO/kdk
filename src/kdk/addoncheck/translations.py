@@ -7,7 +7,7 @@ from collections import Counter
 from typing import NamedTuple
 
 from ..libs.polib.polib import pofile
-from .rules import WARNING, finding
+from .rules import HINT, WARNING, finding
 from .submission import Submission
 
 BASE = "resources/language"
@@ -18,6 +18,7 @@ METADATA_CONTEXTS = {"Addon Summary": "summary", "Addon Description": "descripti
                      "Addon Disclaimer": "disclaimer"}
 
 FORMAT_TOKEN = re.compile(r"%(?:\([^)]*\))?[-#0 +]*\d*(?:\.\d+)?[sdifr]|\{[^{}]*\}")
+MARKUP_KINDS = ("B", "I", "UPPERCASE", "LOWERCASE", "CAPITALIZE", "LIGHT", "COLOR")
 MARKUP_TOKEN = re.compile(r"\[/?(?:B|I|UPPERCASE|LOWERCASE|CAPITALIZE|LIGHT|COLOR)(?: [^\]]*)?\]|\[CR\]|\n",
                           re.IGNORECASE)
 
@@ -61,6 +62,11 @@ def check(sub: Submission) -> list[dict]:
         return []
     by_id, other = source
     rows = _source_rows(sub, source_rel, by_id, other)
+    # imported here: strings imports this module
+    from .strings import uses
+
+    read_ids, computed = uses(sub)
+    coded = None if computed else {str(u.string_id) for u in read_ids if u.rel.endswith(".py")}
     for rel in sorted(sub.files):
         folder = rel.rpartition("/")[0]
         if rel == source_rel or not rel.endswith("/strings.po") or folder.rpartition("/")[0] != BASE \
@@ -68,7 +74,7 @@ def check(sub: Submission) -> list[dict]:
             continue
         translation = read(sub.abs(rel))
         if translation is not None:
-            rows += _translation_rows(sub, rel, translation[0], by_id)
+            rows += _translation_rows(sub, rel, translation[0], by_id, coded)
     return rows
 
 
@@ -93,8 +99,9 @@ def _source_rows(sub: Submission, rel: str, by_id: dict[str, Entry], other: dict
     return rows
 
 
-def _translation_rows(sub: Submission, rel: str, entries: dict[str, Entry], source: dict[str, Entry]) -> list[dict]:
-    """Ids en_gb lacks, translations of older English text, and placeholders that do not match."""
+def _translation_rows(sub: Submission, rel: str, entries: dict[str, Entry], source: dict[str, Entry],
+                      coded: set[str] | None) -> list[dict]:
+    """Ids en_gb lacks, outdated translations, and placeholders or markup that differ."""
     rows = []
     for string_id, entry in entries.items():
         english = source.get(string_id)
@@ -109,13 +116,14 @@ def _translation_rows(sub: Submission, rel: str, entries: dict[str, Entry], sour
                                 f"String {string_id} translates an older English text; Kodi shows the English "
                                 f"string until the translation is updated"))
         else:
-            rows += _placeholder_rows(sub, rel, string_id, entry)
+            rows += _placeholder_rows(sub, rel, string_id, entry, coded is None or string_id in coded)
     return rows
 
 
 def _format_tokens(text: str) -> list[str]:
-    """The % and {} placeholders in the text, in order, %% and doubled braces left out."""
-    return FORMAT_TOKEN.findall(text.replace("%%", "").replace("{{", "").replace("}}", ""))
+    """The % and {} placeholders in the text, in order; %%, doubled braces and "10 %" left out."""
+    text = re.sub(r"(?<=\d) ?%(?= )", "", text.replace("%%", "").replace("{{", "").replace("}}", ""))
+    return FORMAT_TOKEN.findall(text)
 
 
 def _markup(text: str) -> Counter:
@@ -123,20 +131,42 @@ def _markup(text: str) -> Counter:
     return Counter(re.sub(r"(?i)^\[COLOR .*\]$", "[COLOR]", tag).upper() for tag in MARKUP_TOKEN.findall(text))
 
 
-def _placeholder_rows(sub: Submission, rel: str, string_id: str, entry: Entry) -> list[dict]:
-    """A translation whose placeholders, label tags or line breaks differ from its own msgid's."""
+def _unbalanced(tags: Counter) -> bool:
+    """True when a label tag opens more or fewer times than it closes."""
+    return any(tags[f"[{kind}]"] != tags[f"[/{kind}]"] for kind in MARKUP_KINDS)
+
+
+def _breaks(tags: Counter) -> int:
+    """How many line breaks the tags hold."""
+    return tags["[CR]"] + tags["\n"]
+
+
+def _placeholder_rows(sub: Submission, rel: str, string_id: str, entry: Entry, formats: bool) -> list[dict]:
+    """Placeholders unlike the msgid's in a formatted string, and markup that differs."""
     rows = []
     source, target = _format_tokens(entry.msgid), _format_tokens(entry.msgstr)
     positional = [t for t in source if t.startswith("%") and not t.startswith("%(")]
     translated = [t for t in target if t.startswith("%") and not t.startswith("%(")]
-    if Counter(source) != Counter(target) or positional != translated:
+    if formats and (Counter(source) != Counter(target) or positional != translated):
         has = f"placeholders {' '.join(target)}" if target else "no placeholders"
         english = " ".join(source) if source else "none"
         rows.append(finding("lang.placeholders", sub.abs(rel), entry.line, string_id,
                             f"String {string_id} has {has} where the English has {english}, so the add-on's "
                             f"formatting call fails"))
-    if _markup(entry.msgid) != _markup(entry.msgstr):
+    english_tags, tags = _markup(entry.msgid), _markup(entry.msgstr)
+    if "\\n" in entry.msgstr and "\\n" not in entry.msgid:
         rows.append(finding("lang.placeholders", sub.abs(rel), entry.line, string_id,
-                            f"String {string_id} has other label tags or line breaks than the English, so "
-                            f"formatting can run into the rest of the label", WARNING))
+                            f"String {string_id} writes \\n as text where the English has a line break, so users "
+                            f"see the backslash", WARNING))
+    elif _unbalanced(tags) and not _unbalanced(english_tags):
+        rows.append(finding("lang.placeholders", sub.abs(rel), entry.line, string_id,
+                            f"String {string_id} leaves a label tag open or closes one it never opened, so "
+                            f"formatting runs into the rest of the label", WARNING))
+    elif _breaks(tags) > _breaks(english_tags):
+        rows.append(finding("lang.placeholders", sub.abs(rel), entry.line, string_id,
+                            f"String {string_id} adds line breaks the English does not have, which can push the "
+                            f"label past its space", WARNING))
+    elif tags != english_tags:
+        rows.append(finding("lang.placeholders", sub.abs(rel), entry.line, string_id,
+                            f"String {string_id} has other label tags or line breaks than the English", HINT))
     return rows

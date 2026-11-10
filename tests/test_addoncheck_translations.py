@@ -32,17 +32,32 @@ class TestTranslations(AddonCase):
                          ["lang.outdated"])
 
     def test_format_placeholders(self):
-        """A missing %s, swapped positional tokens and a broken brace are errors."""
+        """In a string code reads, a missing %s, swapped tokens and a broken brace are errors."""
+        reader = {"resources/lib/main.py": "import xbmcaddon\nx = xbmcaddon.Addon().getLocalizedString(32000)\n"}
         for english, german in (("Play %s", "Abspielen"), ("%s of %d", "%d von %s"), ("Testing {0}", "Test {0")):
-            rows = self.rows({**clean_files(), EN_GB: PO_HEADER + entry(32000, english),
+            rows = self.rows({**clean_files(), **reader, EN_GB: PO_HEADER + entry(32000, english),
                               DE_DE: PO_HEADER + entry(32000, english, german)}, "lang.placeholders")
             self.assertEqual([r["severity"] for r in rows], ["error"], english)
 
-    def test_markup_and_percent_signs(self):
-        """A dropped [B] tag warns; %% and an empty msgstr do not count."""
-        rows = self.rows({**clean_files(), EN_GB: PO_HEADER + entry(32000, "[B]Hi[/B]"),
-                          DE_DE: PO_HEADER + entry(32000, "[B]Hi[/B]", "Hallo")}, "lang.placeholders")
-        self.assertEqual([r["severity"] for r in rows], ["warning"])
+    def test_settings_text_is_never_formatted(self):
+        """A string only settings.xml reads is not compared, and "10 % davon" is no placeholder."""
+        rows = self.rows({**clean_files(), EN_GB: PO_HEADER + entry(32000, "Play %s"),
+                          DE_DE: PO_HEADER + entry(32000, "Play %s", "Abspielen")}, "lang.placeholders")
+        self.assertEqual(rows, [])
+        reader = {"resources/lib/main.py": "import xbmcaddon\nx = xbmcaddon.Addon().getLocalizedString(32000)\n"}
+        rows = self.rows({**clean_files(), **reader, EN_GB: PO_HEADER + entry(32000, "at least 10% of it"),
+                          DE_DE: PO_HEADER + entry(32000, "at least 10% of it", "mindestens 10 % davon")},
+                         "lang.placeholders")
+        self.assertEqual(rows, [])
+
+    def test_markup(self):
+        """An unclosed tag or a literal \\n warns; a dropped balanced pair hints; %% is ignored."""
+        cases = (("[B]Hi[/B]", "[B]Hallo", "warning"), ("[B]Hi[/B]", "Hallo", "hint"),
+                 ("A\\nB", "A\\\\nB", "warning"))
+        for english, german, severity in cases:
+            rows = self.rows({**clean_files(), EN_GB: PO_HEADER + entry(32000, english),
+                              DE_DE: PO_HEADER + entry(32000, english, german)}, "lang.placeholders")
+            self.assertEqual([r["severity"] for r in rows], [severity], german)
         self.assertEqual(self.rules_for(entry(32000, "100%% done") + entry(32001, "Hi"),
                                         entry(32000, "100%% done", "100%% fertig") + entry(32001, "Hi")), [])
 
