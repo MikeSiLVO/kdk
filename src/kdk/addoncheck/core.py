@@ -62,4 +62,5 @@ def validate_addon(path: str, release: str, *, index_dir: str | None = None, tre
     return {**result, "issues": issues, "notices": notices, "duration": time.time() - started,
             "addon_name": (root.get("name") if root is not None else "") or sub.folder,
             "addon_id": sub.addon_id, "addon_version": sub.version,
-            "provider_name": (root.get("provider-name") if root is not None else "") or ""}
+            "provider_name": (root.get("provider-name") if root is not None else "") or "",
+            "bundled": sorted(folder + "/" for folder in sub.bundled_roots())}

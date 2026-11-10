@@ -31,6 +31,7 @@ def render_json(result: dict, issues: dict) -> dict:
         "addon_id": result.get("addon_id", ""),
         "addon_version": result.get("addon_version", ""),
         "provider_name": result.get("provider_name", ""),
+        "bundled": result.get("bundled", []),
         "timestamp": result["timestamp"],
         "duration_seconds": round(result["duration"], 2),
         "errors": errors,

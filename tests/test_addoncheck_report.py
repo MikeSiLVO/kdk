@@ -70,6 +70,15 @@ class TestReport(AddonCase):
                            ("kodi_release", "omega"), ("errors", 1), ("hints", 1)):
             self.assertEqual(payload[key], value, key)
         self.assertEqual(payload["categories"]["Files"][0]["file"], "resources/bad.json")
+        self.assertEqual(payload["bundled"], [])
+
+    def test_bundled_folders(self):
+        """Bundled third-party folders are listed relative to the add-on, sorted, with a slash."""
+        self.tmp_reset()
+        payload = self.payload({**clean_files(), "resources/lib/six/__init__.py": "",
+                                "resources/lib/mine/__init__.py": "", "resources/lib/mine/LICENSE": "MIT",
+                                "resources/lib/own/__init__.py": ""})
+        self.assertEqual(payload["bundled"], ["resources/lib/mine/", "resources/lib/six/"])
 
     def test_compare_two_runs(self):
         """A fixed and a new finding between two add-on runs, with the add-on metadata on top."""
