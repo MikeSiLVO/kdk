@@ -35,6 +35,10 @@ ABSOLUTE = re.compile(r"^(/home/|/storage/|/sdcard/|/mnt/|/media/|/Users/|/var/l
 KODI_FILES = re.compile(r"special://(?:userdata|profile)/keymaps|advancedsettings\.xml|guisettings\.xml|"
                         r"(?<![\w.])sources\.xml", re.IGNORECASE)
 OTHER_ADDON = re.compile(r"special://(?:profile|userdata)/addon_data/([\w.\-]+)|special://home/addons/([\w.\-]+)")
+PATH_CALLS = {"join", "translatePath", "makeLegalFilename", "validatePath", "abspath", "normpath", "normcase",
+              "realpath", "expanduser", "expandvars", "dirname", "fspath", "fsencode", "fsdecode", "Path", "joinpath",
+              "with_name", "with_suffix", "resolve", "absolute", "str", "format", "replace", "strip", "rstrip",
+              "lstrip", "lower", "encode", "decode"}
 DATABASES = re.compile(r"special://database|special://profile/database|"
                        r"(?:MyVideos|MyMusic|Addons|Textures|ViewModes|Epg|TV)\d+\.db", re.IGNORECASE)
 
@@ -498,9 +502,11 @@ def _kodi_file_rows(sub: Submission, rel: str, tree: ast.Module, names: Names, b
                 and _kodi_target(sub, n.value)]
     sinks = [path for call in ast.walk(tree) if isinstance(call, ast.Call)
              for path in _write_paths(call, names, bound)]
+    keys = _binding_keys(tree) if literals and sinks else {}
+    calls = _local_calls(tree, names) if literals and sinks else {}
     rows, lines = [], set()
     for literal in literals:
-        if literal.lineno in lines or not sinks or not _reaches(tree, literal, sinks):
+        if literal.lineno in lines or not sinks or not _reaches(tree, literal, sinks, keys, calls):
             continue
         lines.add(literal.lineno)
         target = _kodi_target(sub, str(literal.value)) or ""
@@ -510,37 +516,139 @@ def _kodi_file_rows(sub: Submission, rel: str, tree: ast.Module, names: Names, b
     return rows
 
 
-def _reaches(tree: ast.Module, literal: ast.Constant, sinks: list[ast.expr]) -> bool:
-    """True when the string reaches a write path, directly or through names assigned from it."""
-    tainted: set[str] = set()
+def _binding_keys(tree: ast.Module) -> dict[ast.Name, tuple]:
+    """Each name's key: the function, class or module binding it, paired with the name."""
+    owner: dict[ast.Name, ast.AST] = {}
+    outer: dict[ast.AST, ast.AST] = {}
+    local: dict[ast.AST, set[str]] = {tree: set()}
+    shared: dict[ast.AST, dict[str, bool]] = {}
+    stack: list[tuple[ast.AST, ast.AST]] = [(tree, tree)]
+    while stack:
+        node, scope = stack.pop()
+        for child in ast.iter_child_nodes(node):
+            inner = scope
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
+                inner, outer[child] = child, scope
+                local[child] = set() if isinstance(child, ast.ClassDef) else \
+                    {a.arg for a in ast.walk(child.args) if isinstance(a, ast.arg)}
+            elif isinstance(child, ast.Name):
+                owner[child] = scope
+                if isinstance(child.ctx, ast.Store):
+                    local[scope].add(child.id)
+            elif isinstance(child, (ast.Global, ast.Nonlocal)):
+                shared.setdefault(scope, {}).update(dict.fromkeys(child.names, isinstance(child, ast.Global)))
+            stack.append((child, inner))
+    keys = {}
+    for name, scope in owner.items():
+        start = scope
+        while scope is not tree:
+            declared = shared.get(scope, {}).get(name.id)
+            if declared:
+                scope = tree
+                break
+            # a function body never sees the names of a class around it
+            if declared is None and name.id in local[scope] and (scope is start or
+                                                                 not isinstance(scope, ast.ClassDef)):
+                break
+            scope = outer[scope]
+        keys[name] = (scope, name.id)
+    return keys
+
+
+def _local_calls(tree: ast.Module, names: Names) -> dict[ast.Call, list]:
+    """Calls of the file's own functions by name, a class giving __init__; imported callees out."""
+    defined: dict[str, list] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            defined.setdefault(node.name, []).append(node)
+        elif isinstance(node, ast.ClassDef):
+            defined.setdefault(node.name, []).extend(
+                n for n in node.body if isinstance(n, ast.FunctionDef) and n.name == "__init__")
+    calls = {}
+    for call in ast.walk(tree):
+        if not isinstance(call, ast.Call) or names.qualify(call.func) is not None:
+            continue
+        func = call.func
+        name = func.attr if isinstance(func, ast.Attribute) else func.id if isinstance(func, ast.Name) else ""
+        if defined.get(name):
+            calls[call] = defined[name]
+    return calls
+
+
+def _reaches(tree: ast.Module, literal: ast.Constant, sinks: list[ast.expr], keys: dict, calls: dict) -> bool:
+    """True when the string reaches a write path through path expressions and names holding them."""
+    tainted: set[tuple] = set()
 
     def holds(expr) -> bool:
-        return any(n is literal or (isinstance(n, ast.Name) and n.id in tainted) or
-                   (isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name) and n.value.id == "self" and
-                    "." + n.attr in tainted) for n in ast.walk(expr))
+        if expr is literal:
+            return True
+        if isinstance(expr, ast.Name):
+            return keys.get(expr) in tainted
+        if isinstance(expr, ast.Attribute):
+            if expr.attr in ("parent", "parents"):
+                return holds(expr.value)
+            return isinstance(expr.value, ast.Name) and expr.value.id in ("self", "cls") and \
+                ("self", expr.attr) in tainted
+        if isinstance(expr, ast.Call):
+            func = expr.func
+            name = func.attr if isinstance(func, ast.Attribute) else func.id if isinstance(func, ast.Name) else ""
+            return name in PATH_CALLS and (any(holds(a) for a in expr.args) or
+                                           (isinstance(func, ast.Attribute) and holds(func.value)))
+        if isinstance(expr, ast.BinOp):
+            return holds(expr.left) or holds(expr.right)
+        if isinstance(expr, ast.IfExp):
+            return holds(expr.body) or holds(expr.orelse)
+        if isinstance(expr, (ast.Starred, ast.Subscript, ast.FormattedValue, ast.NamedExpr)):
+            return holds(expr.value)
+        parts = expr.elts if isinstance(expr, (ast.Tuple, ast.List, ast.Set)) else \
+            expr.values if isinstance(expr, (ast.JoinedStr, ast.BoolOp, ast.Dict)) else []
+        return any(part is not None and holds(part) for part in parts)
 
-    for _ in range(4):
+    def taint(target) -> None:
+        for n in ast.walk(target):
+            if isinstance(n, ast.Name) and n in keys:
+                tainted.add(keys[n])
+                if isinstance(keys[n][0], ast.ClassDef):
+                    tainted.add(("self", n.id))
+            elif isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name) and n.value.id in ("self", "cls"):
+                tainted.add(("self", n.attr))
+
+    for _ in range(10):
         before = len(tainted)
         for node in ast.walk(tree):
             pairs = []
             if isinstance(node, ast.Assign):
                 pairs = [(t, node.value) for t in node.targets]
-            elif isinstance(node, (ast.AnnAssign, ast.AugAssign)) and node.value is not None:
+            elif isinstance(node, (ast.AnnAssign, ast.AugAssign, ast.NamedExpr)) and node.value is not None:
                 pairs = [(node.target, node.value)]
             elif isinstance(node, (ast.For, ast.AsyncFor, ast.comprehension)):
                 pairs = [(node.target, node.iter)]
             elif isinstance(node, ast.withitem) and node.optional_vars is not None:
                 pairs = [(node.optional_vars, node.context_expr)]
+            elif isinstance(node, ast.Call) and node in calls:
+                _taint_parameters(node, calls[node], holds, tainted)
             for target, value in pairs:
                 if holds(value):
-                    for n in ast.walk(target):
-                        if isinstance(n, ast.Name):
-                            tainted.add(n.id)
-                        elif isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name) and n.value.id == "self":
-                            tainted.add("." + n.attr)
+                    taint(target)
         if len(tainted) == before:
             break
     return any(holds(sink) for sink in sinks)
+
+
+def _taint_parameters(call: ast.Call, functions: list, holds, tainted: set) -> None:
+    """Taint the parameters of the file's own functions that the call fills with a held path."""
+    for function in functions:
+        params = function.args.posonlyargs + function.args.args
+        skip = 1 if params and params[0].arg in ("self", "cls") else 0
+        for i, arg in enumerate(call.args):
+            if isinstance(arg, ast.Starred):
+                break
+            if i + skip < len(params) and holds(arg):
+                tainted.add((function, params[i + skip].arg))
+        named = {a.arg for a in params + function.args.kwonlyargs}
+        for keyword in call.keywords:
+            if keyword.arg in named and holds(keyword.value):
+                tainted.add((function, keyword.arg))
 
 
 def _key_name(name: str | None) -> bool:

@@ -137,6 +137,33 @@ class TestHabits(AddonCase):
         rows = self.rows(code(body), "py.kodi-files")
         self.assertEqual([(r["line"], r["subject"]) for r in rows], [(8, "special://profile/keymaps")])
 
+    def test_kodi_files_parsed_and_other_scopes(self):
+        """A parsed tree and another function's same name carry no path; a joined dirname does."""
+        body = ("import os\nimport xbmcvfs\nfrom xml.etree import ElementTree\n"
+                "AS = xbmcvfs.translatePath('special://profile/advancedsettings.xml')\n"
+                "def excludes():\n    tree = ElementTree.parse(AS)\n    root = tree.getroot()\n"
+                "    path = AS\n    return root, path\n"
+                "def clean(folder):\n    for root, dirs, files in os.walk(folder):\n"
+                "        xbmcvfs.delete(os.path.join(root, files[0]))\n    path = folder\n"
+                "    xbmcvfs.mkdir(path)\n"
+                "def backup():\n    xbmcvfs.copy('a', os.path.join(os.path.dirname(AS), 'old.xml'))\n")
+        self.assertEqual([r["line"] for r in self.rows(code(body), "py.kodi-files")], [4])
+
+    def test_kodi_files_through_globals_dicts_classes_and_helpers(self):
+        """A path held by a global, dict, class attribute or helper parameter is followed."""
+        km = "'special://profile/keymaps'"
+        body = ("import os\nimport xbmcvfs\nKM = None\ndef init():\n    global KM\n"
+                f"    KM = xbmcvfs.translatePath({km})\n"
+                "def save():\n    open(os.path.join(KM, 'a.xml'), 'w')\n"
+                f"P = {{'km': {km}}}\nopen(os.path.join(P['km'], 'a.xml'), 'w')\n"
+                f"class K:\n    D = {km}\n    def save(self):\n        xbmcvfs.delete(self.D)\n"
+                "def write(path):\n    open(path, 'w')\n"
+                f"write(os.path.join({km}, 'b.xml'))\nwrite('special://profile/addon_data/script.test/c')\n"
+                f"class L:\n    E = {km}\n    def save(self, E='x'):\n        xbmcvfs.delete(E)\n"
+                "import shutil\ndef copy(dst, src):\n    open(dst, 'w')\n"
+                "shutil.copy('special://profile/advancedsettings.xml', '/x/b.xml')\n")
+        self.assertEqual(sorted(r["line"] for r in self.rows(code(body), "py.kodi-files")), [6, 9, 12, 17])
+
     def test_timeouts_and_strptime(self):
         """Requests without a timeout, also on a session, and strptime are hints."""
         body = ("import requests\nfrom datetime import datetime\nrequests.get('u')\nrequests.get('u', timeout=5)\n"
