@@ -7,7 +7,7 @@ import re
 
 from ..libs.utils.images import get_image_info, has_transparent_pixels
 from ..libs.validation.repo import ARTWORK
-from .rules import finding
+from .rules import HINT, finding
 from .submission import Submission
 
 # add-on kinds the Kodi repo's checker asks no fanart of, by a part of the add-on's folder name
@@ -44,7 +44,8 @@ def check(sub: Submission) -> list[dict]:
             rows += _image_rows(sub, kind, fallback, spec, unreadable)
         else:
             rows.append(finding(f"art.no-{kind}", sub.xml_path, sub.root.sourceline, kind,
-                                f"The add-on has no {kind}; add one and list it in <assets>"))
+                                f"The add-on has no {kind}; add one and list it in <assets>",
+                                HINT if kind == "icon" and sub.module else None))
     for rel in sorted(sub.files):
         name = rel.rpartition("/")[2]
         if rel not in unreadable and IMAGE_NAME.match(name) and "Type" not in dict(get_image_info(sub.abs(rel))):

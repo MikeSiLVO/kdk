@@ -32,6 +32,15 @@ class TestArtwork(AddonCase):
                                                                              'id="script.module.test"')}
         self.assertEqual(self.rules(files, "art.", folder="script.module.test"), ["art.no-icon"])
 
+    def test_no_icon_on_a_module(self):
+        """No icon is a hint on an add-on with a module extension point, a warning elsewhere."""
+        script = assets("")["addon.xml"].replace('id="script.test"', 'id="script.module.test"')
+        module = script.replace('point="xbmc.python.script" library="default.py"',
+                                'point="xbmc.python.module" library="lib"')
+        for xml, severity in ((module, "hint"), (script, "warning")):
+            rows = self.rows({**assets(""), "addon.xml": xml}, "art.no-icon", folder="script.module.test")
+            self.assertEqual([r["severity"] for r in rows], [severity])
+
     def test_empty_tag(self):
         """An empty <screenshot> warns."""
         self.assertIn("art.empty-tag", self.rules(assets("<icon>resources/icon.png</icon>"

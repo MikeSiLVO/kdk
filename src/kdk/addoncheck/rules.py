@@ -113,7 +113,7 @@ RULES = {
     "art.transparency": (ERROR, "An icon, screenshot or banner with transparency, or a clearlogo without."),
     "art.size": (ERROR, "An <assets> image whose dimensions its type does not allow."),
     "art.file-size": (ERROR, "A fanart or screenshot over its file size limit."),
-    "art.no-icon": (WARNING, "No icon."),
+    "art.no-icon": (WARNING, "No icon; a hint on a module add-on."),
     "art.no-fanart": (WARNING, "No fanart."),
     "art.screenshot-unlisted": (HINT, "A screenshot image <assets> does not list."),
     "py.syntax": (ERROR, "A Python file that is not UTF-8 or does not parse on the branch's oldest Python; on "

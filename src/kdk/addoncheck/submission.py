@@ -70,6 +70,12 @@ class Submission:
         state = self.root.find("*//lifecyclestate")
         return state is not None and state.get("type") == "broken"
 
+    @property
+    def module(self) -> bool:
+        """True when addon.xml declares an xbmc.python.module extension."""
+        return self.root is not None and any(e.get("point") == "xbmc.python.module"
+                                             for e in self.root.findall("extension"))
+
     def _parse(self):
         """Parse addon.xml with line numbers; records the fault and returns None when malformed."""
         try:
