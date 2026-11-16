@@ -76,6 +76,14 @@ class Submission:
         return self.root is not None and any(e.get("point") == "xbmc.python.module"
                                              for e in self.root.findall("extension"))
 
+    @property
+    def entry_files(self) -> set[str]:
+        """Paths in addon.xml's library attributes; Kodi runs a script among them as __main__."""
+        if self.root is None:
+            return set()
+        return {os.path.normpath(str(path).replace("\\", "/")).replace(os.sep, "/")
+                for path in self.root.xpath("//@library")}
+
     def _parse(self):
         """Parse addon.xml with line numbers; records the fault and returns None when malformed."""
         try:

@@ -27,6 +27,8 @@ NEWER_MODULES = {"zoneinfo": "3.9", "graphlib": "3.9", "tomllib": "3.11", "annot
                  "string.templatelib": "3.14", "compression": "3.14", "concurrent.interpreters": "3.14"}
 NEWER_BUILTINS = {"aiter": "3.10", "anext": "3.10", "ExceptionGroup": "3.11"}
 GUARD_ERRORS = {"ImportError", "ModuleNotFoundError", "AttributeError", "NameError", "Exception", "BaseException"}
+IMPORT_ERRORS = {"ImportError", "ModuleNotFoundError", "Exception", "BaseException"}
+KODI_MODULES = {"xbmc", "xbmcaddon", "xbmcgui", "xbmcplugin", "xbmcvfs", "xbmcdrm"}
 
 REQUESTS = {f"requests.{m}" for m in ("get", "post", "put", "patch", "delete", "head", "request")} | \
            {f"requests.Session.{m}" for m in ("get", "post", "put", "patch", "delete", "head", "request")}
@@ -93,9 +95,11 @@ def _file_rows(sub: Submission, rel: str, tree: ast.Module, stops: set[str]) -> 
                   if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
                   and node.body and isinstance(node.body[0], ast.Expr) and isinstance(node.body[0].value, ast.Constant)}
     rows = [] if future else _annotation_rows(sub, rel, tree)
+    flags = _kodi_flags(tree)
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
-            rows += _call_rows(sub, rel, node, names, parents, bound) + _sleep_rows(sub, rel, node, parents, scope)
+            rows += _call_rows(sub, rel, node, names, parents, bound, flags) + \
+                _sleep_rows(sub, rel, node, parents, scope)
         elif isinstance(node, (ast.Import, ast.ImportFrom)):
             modules = [a.name for a in node.names] if isinstance(node, ast.Import) else [node.module or ""]
             for module in modules:
@@ -401,7 +405,43 @@ def _main_block(node, parents: dict) -> bool:
     return False
 
 
-def _call_rows(sub: Submission, rel: str, node: ast.Call, names: Names, parents: dict, bound: set) -> list[dict]:
+def _kodi_flags(tree: ast.Module) -> set[str]:
+    """Names a try sets True on importing a Kodi module and False in its ImportError handler."""
+    flags = set()
+    for node in tree.body:
+        if not isinstance(node, ast.Try) or not any(
+                alias.name.split(".")[0] in KODI_MODULES for n in node.body if isinstance(n, ast.Import)
+                for alias in n.names):
+            continue
+        for handler in node.handlers:
+            if handler.type is None or IMPORT_ERRORS & {n.id for n in ast.walk(handler.type)
+                                                        if isinstance(n, ast.Name)}:
+                flags |= _set_to(node.body, True) & _set_to(handler.body, False)
+    return flags
+
+
+def _set_to(body: list[ast.stmt], value: bool) -> set[str]:
+    """Names the statements assign the constant to."""
+    return {target.id for n in body if isinstance(n, ast.Assign) and isinstance(n.value, ast.Constant)
+            and n.value.value is value for target in n.targets if isinstance(target, ast.Name)}
+
+
+def _outside_kodi(sub: Submission, rel: str, node, parents: dict, flags: set[str]) -> bool:
+    """True for code reached only outside Kodi: a failed-import branch, a non-entry main block."""
+    child, parent = node, parents.get(node)
+    while parent is not None:
+        if isinstance(parent, ast.If):
+            test, branch = parent.test, parent.orelse
+            if isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not):
+                test, branch = test.operand, parent.body
+            if isinstance(test, ast.Name) and test.id in flags and child in branch:
+                return True
+        child, parent = parent, parents.get(parent)
+    return rel not in sub.entry_files and _main_block(node, parents)
+
+
+def _call_rows(sub: Submission, rel: str, node: ast.Call, names: Names, parents: dict, bound: set,
+               flags: set[str]) -> list[dict]:
     """Rows for one call: newer features, prints, sys.path, own ids, timeouts, strptime."""
     called = names.call(node)
     path, line, rows = sub.abs(rel), node.lineno, []
@@ -419,12 +459,15 @@ def _call_rows(sub: Submission, rel: str, node: ast.Call, names: Names, parents:
         rows += _floor_rows(sub, rel, line, "py.annotations-floor", text, (3, 10),
                             f"{text} in {node.func.id}() raises TypeError on Python 3.8, even with "
                             f"from __future__ import annotations; {fix}", f"{text} in {node.func.id}()", fix)
-    if isinstance(node.func, ast.Name) and node.func.id == "print" and "print" not in bound and \
-            not _main_block(node, parents):
+    if isinstance(node.func, ast.Name) and node.func.id == "print" and "print" not in bound:
         target = next((k.value for k in node.keywords if k.arg == "file"), None)
         if target is None or names.qualify(target) == "sys.stdout":
-            rows.append(finding("py.print", path, line, "print",
-                                "print() writes to the Kodi log at debug level, one entry per write; use xbmc.log"))
+            if _outside_kodi(sub, rel, node, parents, flags):
+                rows.append(finding("py.print", path, line, "print", "print() here runs only outside Kodi; a "
+                                    "comment saying why saves a review question", HINT))
+            else:
+                rows.append(finding("py.print", path, line, "print", "print() writes to the Kodi log at debug "
+                                    "level, one entry per write; use xbmc.log"))
     if called in ("sys.path.append", "sys.path.insert", "sys.path.extend", "site.addsitedir"):
         rows.append(_sys_path(sub, rel, node))
     if called == "xbmcaddon.Addon":

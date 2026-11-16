@@ -133,7 +133,7 @@ RULES = {
                                      "condition is not fixed text."),
     "py.sleep-loop": (WARNING, "Sleeps in a loop that block past 3 s without seeing Kodi's abort; a hint for a "
                                "shorter loop or one long sleep."),
-    "py.print": (WARNING, "A print() call outside a __main__ block."),
+    "py.print": (WARNING, "A print() call; a hint where it runs only outside Kodi."),
     "py.sys-path": (WARNING, "A change to sys.path."),
     "py.addon-own-id": (HINT, "xbmcaddon.Addon() given the add-on's own id."),
     "py.absolute-path": (WARNING, "A path written for one machine."),

@@ -103,10 +103,21 @@ class TestHabits(AddonCase):
         self.assertEqual(self.rules(code(body), "py.sleep"), [])
 
     def test_print_and_sys_path(self):
-        """A print warns unless it writes elsewhere or runs as __main__; sys.path changes warn."""
+        """A print to stdout warns, or hints in a non-entry main block; sys.path changes warn."""
         body = ("import sys\nprint('x')\nprint('y', file=sys.stderr)\nsys.path.insert(0, 'lib')\n"
                 "sys.path += ['lib']\nif __name__ == '__main__':\n    print('z')\n")
-        self.assertEqual(self.rules(code(body), "py."), ["py.print", "py.sys-path", "py.sys-path"])
+        self.assertEqual(sorted((r["rule"], r["line"], r["severity"]) for r in self.rows(code(body), "py.")),
+                         [("py.print", 2, "warning"), ("py.print", 7, "hint"), ("py.sys-path", 4, "warning"),
+                          ("py.sys-path", 5, "warning")])
+
+    def test_print_outside_kodi(self):
+        """A print behind a failed Kodi import hints; one in an entry script's main block warns."""
+        body = ("try:\n    import xbmc\n    IN_KODI = True\nexcept ImportError:\n    IN_KODI = False\n"
+                "if IN_KODI:\n    print('a')\nelse:\n    print('b')\nif not IN_KODI:\n    print('c')\n")
+        self.assertEqual(sorted((r["line"], r["severity"]) for r in self.rows(code(body), "py.print")),
+                         [(7, "warning"), (9, "hint"), (11, "hint")])
+        files = {**code(""), "default.py": "if __name__ == '__main__':\n    print('x')\n"}
+        self.assertEqual([r["severity"] for r in self.rows(files, "py.print")], ["warning"])
 
     def test_own_id_paths_and_kodi_files(self):
         """Own id, home path, other add-on writes and databases get rows; comparisons do not."""
