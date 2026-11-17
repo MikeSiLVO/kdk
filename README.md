@@ -214,7 +214,7 @@ Settings are loaded in priority order:
 4. Built-in defaults
 
 `--isolated` skips both config files, so only CLI flags and the defaults apply.
-The GUI saves its Kodi path and editor choice to the user config.
+The GUI's Settings dialog writes `kodi_path`, `language`, `editor` and `update_check` to the user config. The GUI picks the Kodi release per skin in its header instead of `kodi_release`, and drops a pick once the skin's addon.xml implies that release itself. The window keeps its own state under `gui`: size, detail pane position and sizes, columns, filters, grouping, recent skins and the release picked per skin.
 
 Example config file:
 
@@ -231,7 +231,7 @@ Example config file:
 | `kodi_release` | `""` | Release to check against: `omega` (Kodi 21) or `piers` (Kodi 22). Empty uses the release the skin's `xbmc.gui` import names, or the newest when it names none. A forced release that will not load the skin is reported. An unknown value is reported and ignored. |
 | `language` | `"resource.language.en_gb"` | Language of the skin's `strings.po` that label ids are looked up in, as the folder name or its code (`en_gb`). |
 | `validation_exclude` | `["shortcuts"]` | Folder or file names XML Validation skips, matched against any part of the path. |
-| `editor` | `""` | Editor a double-click in the GUI opens the issue in: `code`, `sublime`, `notepad++`, `vim`, `nano`, `kate` or `gedit`. Empty opens the file in the system's default app, without going to the line. |
+| `editor` | `""` | Editor the GUI opens an issue in: `code`, `sublime`, `notepad++`, `vim`, `nano`, `kate` or `gedit`. Empty opens the file in the system's default app, without going to the line. |
 | `update_check` | `true` | The GUI, and `kdk validate` in a terminal, say when a newer kdk is out. Runs in CI and runs with `--json`, `--github`, `--quiet` or `--isolated` never check. Setting `KDK_NO_UPDATE_CHECK=1` in the environment also turns it off. |
 
 ## License

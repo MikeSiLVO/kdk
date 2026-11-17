@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 import time
 from datetime import datetime
 from typing import Callable
@@ -29,6 +30,10 @@ CHECK_SEQUENCE = [
 ]
 
 
+class Cancelled(Exception):
+    """Exception `validate_skin` raises at the first progress report once cancel is set."""
+
+
 def filter_include_warnings(all_issues: dict) -> dict:
     """Drop the warnings that come from include content, keeping its errors."""
     filtered = {}
@@ -46,14 +51,17 @@ def validate_skin(
     config_overrides: dict | None = None,
     isolated: bool = False,
     progress_callback: Callable[[int, int, str], None] | None = None,
+    cancel: threading.Event | None = None,
 ) -> dict:
-    """Validate a skin with every check; returns issues, release, notices, timing, or an error."""
+    """Validate a skin with every check; returns the result or an error, or raises Cancelled."""
     skin_path = os.path.abspath(skin_path)
     config = load_config(skin_path, config_overrides, isolated)
     settings = Settings(config)
     total_steps = len(CHECK_SEQUENCE)
 
     def progress(step: int, msg: str):
+        if cancel is not None and cancel.is_set():
+            raise Cancelled
         if progress_callback:
             progress_callback(step, total_steps, msg)
 
@@ -115,6 +123,8 @@ def validate_skin(
         if method:
             try:
                 all_issues[name] = method(progress_callback=step_progress) or []
+            except Cancelled:
+                raise
             except Exception as e:
                 logger.error("Check %s failed: %s", name, e, exc_info=True)
                 provider.addon.add_notice(f"The {name} check failed, so its results are missing: {e}")
