@@ -75,7 +75,7 @@ RULES = {
     "lang.strings-xml": (ERROR, "A strings.xml, which Kodi no longer reads."),
     "lang.code-invalid": (ERROR, "A language folder whose code is not a language code."),
     "lang.code-unknown": (ERROR, "A language folder no Kodi language add-on is named after."),
-    "lang.folder-case": (WARNING, "A language folder name with uppercase letters."),
+    "lang.folder-case": (ERROR, "A language folder name with uppercase letters."),
     "lang.no-en-gb": (ERROR, "Translations without a resource.language.en_gb folder."),
     "lang.no-po": (HINT, "Settings or string ids without any strings.po."),
     "lang.po-encoding": (ERROR, "A strings.po not saved as UTF-8."),

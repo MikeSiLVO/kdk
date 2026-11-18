@@ -38,10 +38,11 @@ class TestFolders(AddonCase):
         self.assertEqual([r["subject"] for r in self.rows(files, "lang.code")], ["resource.language.ga"])
 
     def test_uppercase_folder(self):
-        """resource.language.de_DE warns."""
+        """resource.language.de_DE is an error."""
         self.write_index("omega", index_entry("resource.language.de_de", "1.0.0", points=["kodi.resource.language"]))
         files = {**clean_files(), "resources/language/resource.language.de_DE/strings.po": PO_HEADER}
-        self.assertEqual(self.rules(files, "lang.folder"), ["lang.folder-case"])
+        self.assertEqual([(r["rule"], r["severity"]) for r in self.rows(files, "lang.folder")],
+                         [("lang.folder-case", "error")])
 
     def test_no_en_gb(self):
         """Translations without en_gb."""
