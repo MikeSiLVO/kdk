@@ -28,7 +28,8 @@ def validate_addon(path: str, release: str, *, index_dir: str | None = None, tre
     started = time.time()
     result = {"issues": {}, "addon_name": os.path.basename(path), "addon_path": path, "addon_id": "",
               "addon_version": "", "provider_name": "", "kodi_release": release, "notices": [],
-              "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "duration": 0.0, "error": None}
+              "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "duration": 0.0, "error": None,
+              "partial": False}
     if not os.path.isdir(path):
         return {**result, "error": f"{path} is not a directory"}
     if release not in TARGETS:
@@ -60,6 +61,7 @@ def validate_addon(path: str, release: str, *, index_dir: str | None = None, tre
         issues.setdefault(PREFIXES[row["rule"].split(".")[0]], []).append(row)
     root = sub.root
     return {**result, "issues": issues, "notices": notices, "duration": time.time() - started,
+            "partial": checks is not CHECKS,
             "addon_name": (root.get("name") if root is not None else "") or sub.folder,
             "addon_id": sub.addon_id, "addon_version": sub.version,
             "provider_name": (root.get("provider-name") if root is not None else "") or "",

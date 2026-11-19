@@ -27,6 +27,7 @@ def render_json(result: dict, issues: dict) -> dict:
         "domain": "addon",
         "kodi_release": result.get("kodi_release"),
         "notices": result.get("notices") or [],
+        "partial": result.get("partial", False),
         "addon_name": result["addon_name"],
         "addon_id": result.get("addon_id", ""),
         "addon_version": result.get("addon_version", ""),

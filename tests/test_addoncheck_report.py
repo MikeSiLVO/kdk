@@ -8,7 +8,7 @@ import sys
 import unittest
 from pathlib import Path
 
-from addons import AddonCase, clean_files
+from addons import METADATA, AddonCase, addon_xml, clean_files
 from kdk.addoncheck import __version__
 from kdk.addoncheck.report import render_json
 from kdk.addoncheck.rules import ADDON_CHECKER, PREFIXES, RULES
@@ -72,6 +72,14 @@ class TestReport(AddonCase):
             self.assertEqual(payload[key], value, key)
         self.assertEqual(payload["categories"]["Files"][0]["file"], "resources/bad.json")
         self.assertEqual(payload["bundled"], [])
+        self.assertIs(payload["partial"], False)
+
+    def test_partial_run(self):
+        """A broken add-on, or one without addon.xml, runs fewer checks and says so."""
+        broken = addon_xml(metadata=METADATA + "\n    <lifecyclestate type=\"broken\">Gone</lifecyclestate>")
+        self.assertIs(self.payload({**clean_files(), "addon.xml": broken})["partial"], True)
+        self.tmp_reset()
+        self.assertIs(self.payload({"default.py": ""})["partial"], True)
 
     def test_bundled_folders(self):
         """Bundled third-party folders are listed relative to the add-on, sorted, with a slash."""
