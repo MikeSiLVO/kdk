@@ -64,6 +64,9 @@ def check(sub: Submission) -> list[dict]:
                                 "The add-on has settings or reads string ids but has no strings.po, so its "
                                 "text cannot be translated"))
     for path, line, string_id, problem, effect in strings_po_faults(sub.path):
+        # lang.po-header reports a file Kodi refuses whole
+        if problem == "header":
+            continue
         message = f"String {string_id or 'in the header'} {_PO_PROBLEMS[problem]}"
         if effect:
             message += f", so Kodi {_PO_EFFECTS[effect]}"
