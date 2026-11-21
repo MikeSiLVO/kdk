@@ -5,6 +5,52 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.0] - 2026-11-21
+
+### Added
+
+- `kdk addon validate`: checks a Python add-on the way xbmc/repo-scripts reviews it (addon.xml, dependencies, files, language folders and strings, licenses, artwork, Python syntax, common review findings and Kodi API use). Its `--json` runs compare with `kdk compare`, and `kdk addon rules` lists its rules. `"partial": true` in the JSON marks a run that skipped checks, for a broken add-on or one without addon.xml.
+- `kdk textures pack` packs a folder of images into a `Textures.xbt`, and `kdk textures unpack` writes one back out as images; the GUI offers both on its start screen and under its Tools button. A CLI-only install needs the `kdk[textures]` extra.
+- The GUI is redesigned: a start screen with recent skins and drop-to-open, a Kodi release picker per skin, with a warning when that release will not load addon.xml's xbmc.gui import, a progress card with Cancel, a detail pane, grouping and filters.
+- The GUI, and `kdk validate` in a terminal, say when a newer kdk is out. `update_check: false` in the user config or `KDK_NO_UPDATE_CHECK=1` turns it off; CI, `--json`, `--github`, `--quiet` and `--isolated` runs never check.
+- `includes.cycle` (error): an include that reaches itself through its calls, which Kodi expands without end, so a window using it never finishes loading.
+- `xml.theme-only-color` (warning): a color name only a theme's colors file defines, which the default theme shows transparent.
+- `repo.language-case` (warning, blocks a Kodi repo submission): a language folder whose name is not all lowercase, which Weblate reads as a second copy.
+- `xml.unknown-info` also covers `String.IsEqual`, `Contains`, `StartsWith` and `EndsWith` with other than two arguments, such as `String.Contains(Container.FolderPath,sources://,Left)`, which Kodi always reads as false.
+- `xml.literal-tag` also covers `$NUMBER[]` and `$LOCALIZE[]` in a tag Kodi reads as written, and `xml.invalid-value` covers `$NUMBER[]` in a number attribute such as an animation's `time`.
+- `xml.constant-not-substituted` covers a constant in a `min` or `max` attribute beside size text, such as `<width max="W">auto</width>`, where Kodi substitutes only the text.
+- Conditions in `<autoscroll>`, a `<visible>` tag's `allowhiddenfocus` and a variable's `<value condition>` are checked, including undefined `$EXP` names.
+- `xml.invalid-value` covers `sortby`, `sortorder` and `browse` on `<content>`.
+- `includes.undefined` and `xml.undefined-constant` cover an include or constant name with spaces or line breaks around it, which Kodi looks up as written.
+- `xml.empty-condition` covers an include call written with an empty condition, which Kodi never splices.
+- `xml.missing-include-file` covers an include file whose root is not `<includes>`, which Kodi loads nothing from.
+- `fonts.not-loaded` covers a `<fontset>` without an id, which Kodi never loads, and `fonts.uses-not-loaded` a use of a font only such a fontset defines.
+- `labels.broken-string` covers a string sharing an entry with the one above it (no empty line between them), and a `strings.po` whose first entry is a string, which Kodi refuses whole.
+- `labels.undefined` covers an English string with an empty msgid, which Kodi stores nothing for.
+- `repo.no-en-gb` covers a skin whose strings sit only in `resources/language`, which Kodi does not read for a skin.
+- `files.line-endings` and `files.bom` check every shipped text file, not only `.xml`, `.po`, `.txt`, `.py` and `.md`, and find Windows line endings anywhere in a file.
+
+### Changed
+
+- A font file the skin lacks is `fonts.missing-file` as a warning when the skin imports a `resource.font` add-on that may supply it.
+- A duplicated font reports only the copy Kodi drops, naming the one it keeps.
+- A row lands on the first line of a tag that spans lines, where a `kdk-ignore` comment above it applies.
+- An enum attribute row names the attribute, such as `tween`, not its tag.
+- A fault on an include line is reported once at the include, unless its value came from a call's param.
+- Progress shows each file, window and font as it is checked.
+
+### Fixed
+
+- `kdk validate` no longer hangs on an include file with long runs of comments, or on a file that opens with many comments, and URL checks no longer slow down on very long URLs.
+- Two include files naming each other, a processing instruction in a control, a `<res>` without a folder, and a label of a non-ASCII digit no longer stop the run.
+- `$PARAM` names with dots, nested param defaults and include names built from params resolve, so their includes and variables are no longer undefined or unused.
+- A comment-only include or variable counts as defined, and fonts only the shortcuts files use count as used.
+- Includes.xml, include files and Font.xml come from the default xml folder when the skin's other folder lacks them.
+- SendClick and Control.Message ids are checked in the window they name.
+- `<enable>`, `<hitrect>`, multiimage `flipx`, `flipy` and `infill`, a label-style `<info>` with a prefix and postfix, `special://skin` font files and images written as URLs are no longer reported.
+- Only a file directly in the xml folder counts as a custom window.
+- A runtime-generated file the skin does not ship, such as a gitignored `script-skinshortcuts-includes.xml`, is no longer checked for line endings.
+
 ## [3.3.1] - 2026-11-07
 
 ### Changed
