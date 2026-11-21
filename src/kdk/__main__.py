@@ -261,6 +261,50 @@ def cmd_rules(args):
     return 0
 
 
+def cmd_textures_pack(args):
+    """Pack a folder's images into a bundle; returns 0, 1 when some were left out, 2 on failure."""
+    from kdk import xbt
+
+    hint = xbt.missing_libraries()
+    if hint:
+        return fail(f"Packing textures needs Pillow and lzallright: {hint}", False)
+    folder = os.path.abspath(args.folder)
+    if not os.path.isdir(folder):
+        return fail(f"{folder} is not a folder", False)
+    bundle = os.path.abspath(args.output or os.path.join(folder, "Textures.xbt"))
+    result = xbt.pack(folder, bundle)
+    print(f"Packed {len(result.packed)} images into {bundle}")
+    if result.duplicates:
+        print(f"  {result.duplicates} identical to another image, stored once")
+    for rel in result.unreadable:
+        print(f"  left out, unreadable or its lowercase name taken: {rel}")
+    return 1 if result.unreadable else 0
+
+
+def cmd_textures_unpack(args):
+    """Unpack a bundle into image files; returns 0, 1 when some were unreadable, 2 on failure."""
+    from kdk import xbt
+
+    hint = xbt.missing_libraries()
+    if hint:
+        return fail(f"Unpacking textures needs Pillow and lzallright: {hint}", False)
+    bundle = os.path.abspath(args.bundle)
+    folder = os.path.abspath(args.output or os.path.splitext(os.path.basename(bundle))[0])
+    skin = xbt.skin_of(bundle)
+    try:
+        result = xbt.unpack(bundle, folder, xbt.media_names(skin) if skin else None, overwrite=args.overwrite)
+    except (OSError, ValueError) as e:
+        return fail(str(e), False)
+    print(f"Unpacked {len(result.written)} textures into {folder}")
+    if result.recased:
+        print(f"  {result.recased} names took their case from the skin's XML; the rest stay lowercase")
+    if result.kept:
+        print(f"  {len(result.kept)} files already there were kept; --overwrite replaces them")
+    for path in result.unreadable:
+        print(f"  not unpacked: {path}")
+    return 1 if result.unreadable else 0
+
+
 def add_filters(parser):
     """Add the flags shared by `validate` and `issues`."""
     from kdk.libs.validation.constants import SEVERITY_ERROR, SEVERITY_WARNING
@@ -339,6 +383,19 @@ def main():
     p_rules = subparsers.add_parser("rules", help="List every rule id with what it reports")
     p_rules.add_argument("--json", action="store_true", help="Output JSON instead of the terminal view")
     p_rules.set_defaults(func=cmd_rules)
+
+    p_textures = subparsers.add_parser("textures", help="Pack images into a Textures.xbt, or unpack one")
+    textures = p_textures.add_subparsers(dest="textures_command")
+    p_textures.set_defaults(func=lambda _args: fail("name a textures command: pack or unpack", False), json=False)
+    p_pack = textures.add_parser("pack", help="Pack every PNG, JPG and GIF under a folder into a bundle")
+    p_pack.add_argument("folder", help="Folder of images, usually the skin's media folder")
+    p_pack.add_argument("--output", "-o", help="Bundle to write (default: Textures.xbt inside the folder)")
+    p_pack.set_defaults(func=cmd_textures_pack, json=False)
+    p_unpack = textures.add_parser("unpack", help="Unpack a bundle back into image files")
+    p_unpack.add_argument("bundle", help="The .xbt file to unpack")
+    p_unpack.add_argument("--output", "-o", help="Folder to unpack into (default: the bundle's name, here)")
+    p_unpack.add_argument("--overwrite", action="store_true", help="Replace files already in the folder")
+    p_unpack.set_defaults(func=cmd_textures_unpack, json=False)
 
     from kdk.addoncheck.cli import add_parser as add_addon_parser
     add_addon_parser(subparsers)

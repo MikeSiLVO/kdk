@@ -41,6 +41,12 @@ Issues = "https://github.com/MikeSiLVO/kdk/issues"
 # Out of the core deps so a CLI-only install doesn't pull ~100MB of Qt
 gui = [
     "PySide6>=6.6",
+    "kdk[textures]",
+]
+# `kdk textures pack` and `unpack`
+textures = [
+    "Pillow>=10.0",
+    "lzallright>=0.2.6",
 ]
 build = [
     "kdk[gui]",

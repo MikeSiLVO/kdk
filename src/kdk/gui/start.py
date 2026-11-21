@@ -1,4 +1,4 @@
-"""Start screen of the GUI: browse for a skin, pick a recent one, or drop a folder on the window."""
+"""Start screen of the GUI: browse for a skin, pick a recent one or drop a folder; texture tools."""
 
 from __future__ import annotations
 
@@ -76,12 +76,14 @@ def fill_recents(view: QListWidget, paths: list[str], current: str):
 
 
 class StartScreen(QWidget):
-    """Page for picking a skin: Browse, recent skins, and the Kodi data checks use."""
+    """Page for picking a skin: Browse, recent skins, Kodi data checks use, texture tools."""
 
     browse_requested = Signal()
     skin_picked = Signal(str)
     back_requested = Signal()
     settings_requested = Signal()
+    unpack_requested = Signal()
+    pack_requested = Signal()
 
     def __init__(self):
         super().__init__()
@@ -154,6 +156,29 @@ class StartScreen(QWidget):
         self.recent_list.itemActivated.connect(lambda item: self.skin_picked.emit(item.data(PATH_ROLE)))
         stack.addWidget(self.recent_label)
         stack.addWidget(self.recent_list)
+
+        textures = QVBoxLayout()
+        textures.setSpacing(8)
+        heading = QLabel("TEXTURES")
+        heading.setFont(small)
+        heading.setStyleSheet("color: gray;")
+        about = QLabel("Unpack a Textures.xbt back into images, or pack a folder of images into one."
+                       " No skin needed.")
+        about.setWordWrap(True)
+        about.setStyleSheet("color: gray;")
+        unpack_btn = QPushButton("Unpack a Textures.xbt...")
+        unpack_btn.clicked.connect(self.unpack_requested)
+        pack_btn = QPushButton("Pack a folder...")
+        pack_btn.clicked.connect(self.pack_requested)
+        texture_buttons = QHBoxLayout()
+        texture_buttons.setSpacing(8)
+        texture_buttons.addWidget(unpack_btn)
+        texture_buttons.addWidget(pack_btn)
+        texture_buttons.addStretch(1)
+        textures.addWidget(heading)
+        textures.addWidget(about)
+        textures.addLayout(texture_buttons)
+        stack.addLayout(textures)
 
         self.setup = QLabel()
         self.setup.setWordWrap(True)

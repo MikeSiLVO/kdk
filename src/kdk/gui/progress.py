@@ -1,4 +1,4 @@
-"""Progress card shown while a skin is validated, with Cancel."""
+"""Progress card for a validation or texture job, with Cancel."""
 
 from __future__ import annotations
 
@@ -152,14 +152,15 @@ class RunCard(QWidget):
         fill = self.palette().color(QPalette.ColorRole.Window) if self._covers else QColor(0, 0, 0, 110)
         QPainter(self).fillRect(self.rect(), fill)
 
-    def start(self, skin: str, pickable: bool = True, covers: bool = False):
-        """Show the card for a new run, clock at zero, dimming the results or hiding the window."""
+    def start(self, title: str, step: str = "Loading the skin", step_of: str = "Before the checks",
+              pickable: bool = True, covers: bool = False):
+        """Start the card for a new job, clock at zero, dimming the results or hiding the window."""
         self._covers = covers
         self._move_to(self._whole if covers else self._pages)
-        self.title.setText(f"Validating {skin}")
+        self.title.setText(title)
         self.bar.setValue(0)
-        self.step.setText("Loading the skin")
-        self.step_of.setText("Before the checks")
+        self.step.setText(step)
+        self.step_of.setText(step_of)
         self._set_detail("")
         self.cancel_btn.setText("Cancel")
         self.pick_btn.setVisible(pickable)
@@ -195,6 +196,12 @@ class RunCard(QWidget):
         # a check's second counted pass starts its count again
         self.bar.setValue(max(self.bar.value(), int(done * 1000)))
         self._set_detail(message.split(": ", 1)[1] if ": " in message else message)
+
+    def show_count(self, done: int, total: int, detail: str):
+        """Show how many of the job's items are done, with the current one as the report."""
+        self.step_of.setText(f"{done} of {total}")
+        self.bar.setValue(int(done * 1000 / total) if total else 0)
+        self._set_detail(detail)
 
     def stopping(self):
         """Say the run is stopping and take both buttons away."""

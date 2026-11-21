@@ -36,6 +36,7 @@ CONTROL_STYLE = (
     " QToolButton#releaseButton { padding-right: 26px; }"
     " QToolButton#releaseButton::menu-indicator { subcontrol-origin: padding; subcontrol-position: right center;"
     " right: 9px; }"
+    " QPushButton#toolsButton::menu-indicator { image: none; width: 0; }"
 )
 _ARROW_STYLE = (
     " QComboBox::drop-down { width: 22px; border: none; background: transparent; }"

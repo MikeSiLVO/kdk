@@ -32,6 +32,7 @@ from kdk.gui.icons import icon
 from kdk.gui.progress import RunCard
 from kdk.gui.settings import SettingsDialog
 from kdk.gui.start import PATH_ROLE, RecentDelegate, StartScreen, fill_recents
+from kdk.gui.textures import TextureTools
 from kdk.gui.style import TOGGLE_STYLE, control_height, control_style, is_dark, round_popups, severity_colors
 from kdk.output.payload import relative
 
@@ -271,9 +272,9 @@ class KdkApp(QMainWindow):
         self._result: dict | None = None
         self._skin = ""
         self._result_skin = ""
-        self._from_start = False
         self._import_line = 0
         self._after_run: Callable[[], None] | None = None
+        self._from_start = False
         self._shown: set[str] = set(self._gui.get("shown", DEFAULT_SHOWN)) & set(issues.BUCKETS)
         self._hidden_columns: set[str] = (set(self._gui.get("hidden_columns", DEFAULT_HIDDEN))
                                           & set(issues.COLUMNS) - {HEADING_COLUMN})
@@ -310,6 +311,8 @@ class KdkApp(QMainWindow):
         self.start.skin_picked.connect(self._open_skin)
         self.start.back_requested.connect(self._show_results)
         self.start.settings_requested.connect(self._open_settings)
+        self.start.unpack_requested.connect(lambda: self._texture_tool(unpack=True))
+        self.start.pack_requested.connect(lambda: self._texture_tool(unpack=False))
         self.results = QWidget()
         page = QVBoxLayout(self.results)
         page.setContentsMargins(0, 0, 0, 0)
@@ -321,8 +324,9 @@ class KdkApp(QMainWindow):
         self.pages.addWidget(self.results)
         root.addWidget(self.pages, stretch=1)
         self.run_card = RunCard(self.pages, central)
-        self.run_card.cancel_requested.connect(self._cancel_run)
+        self.run_card.cancel_requested.connect(self._cancel_job)
         self.run_card.pick_requested.connect(self._go_start)
+        self.textures = TextureTools(self, self.run_card, lambda: self.pages.currentWidget() is self.start)
         self._build_status()
         controls: list[QWidget] = [self.skin_btn, self.release_btn, self.search_edit, self.group_combo,
                                    *self._toggles.values()]
@@ -336,7 +340,7 @@ class KdkApp(QMainWindow):
         QShortcut(QKeySequence(QKeySequence.StandardKey.Find), self).activated.connect(self._focus_search)
 
     def _build_toolbar(self, root: QVBoxLayout):
-        """Build row: skin, release, import pill, Validate, run summary, Save Report, Settings."""
+        """Build row: skin, release, import pill, Validate, summary, Report, Tools, Settings."""
         row = QHBoxLayout()
         self.skin_btn = QToolButton()
         self.skin_btn.setObjectName("skinButton")
@@ -393,6 +397,17 @@ class KdkApp(QMainWindow):
         self.report_btn.setEnabled(False)
         self.report_btn.clicked.connect(self._save_report)
         row.addWidget(self.report_btn)
+        tools_btn = QPushButton()
+        tools_btn.setObjectName("toolsButton")
+        tools_btn.setIcon(icon("wrench-for-dark" if is_dark(self) else "wrench-for-light"))
+        tools_btn.setToolTip("Tools")
+        tools_btn.setAccessibleName("Tools")
+        tools_btn.setFixedWidth(self._height + 4)
+        tools_menu = QMenu(tools_btn)
+        tools_menu.addAction("Unpack textures...", lambda: self._texture_tool(unpack=True))
+        tools_menu.addAction("Pack textures...", lambda: self._texture_tool(unpack=False))
+        tools_btn.setMenu(tools_menu)
+        row.addWidget(tools_btn)
         settings_btn = QPushButton()
         settings_btn.setIcon(icon("gear-for-dark" if is_dark(self) else "gear-for-light"))
         settings_btn.setToolTip("Settings")
@@ -548,7 +563,7 @@ class KdkApp(QMainWindow):
         self._show_start()
 
     def closeEvent(self, event: QCloseEvent):
-        """Remember window, columns and filters; mid-run, hide, stop it and quit once it stops."""
+        """Remember window, columns, filters; mid-run or job, hide, stop it, quit once it stops."""
         self._remember_split()
         header = self.tree.header()
         for n, column in enumerate(issues.COLUMNS):
@@ -574,6 +589,12 @@ class KdkApp(QMainWindow):
                 self._worker.cancel.set()
             self.hide()
             self._worker_thread.finished.connect(QApplication.quit)
+            event.ignore()
+            return
+        texture_thread = self.textures.stop_for_close()
+        if texture_thread is not None:
+            self.hide()
+            texture_thread.finished.connect(QApplication.quit)
             event.ignore()
             return
         super().closeEvent(event)
@@ -624,7 +645,7 @@ class KdkApp(QMainWindow):
             self._open_skin(path)
 
     def _open_skin(self, path: str):
-        """Open a picked or dropped folder as the skin and validate it, stopping a run first."""
+        """Open picked or dropped skin and validate it, stopping a run; not during a texture job."""
         path = os.path.normpath(path)
         if not os.path.isdir(path):
             QMessageBox.critical(self, "Invalid path", f"Not a directory: {path}")
@@ -632,11 +653,29 @@ class KdkApp(QMainWindow):
         if not os.path.isfile(os.path.join(path, "addon.xml")):
             QMessageBox.critical(self, "Not a skin", f"No addon.xml found in: {path}")
             return
+        if self.textures.busy():
+            self.statusBar().showMessage("Wait for the texture job to finish, or cancel it", 5000)
+            return
         if self._worker:
             self._cancel_run(lambda: self._open_skin(path))
             return
         self._skin = path
         self._run_validation()
+
+    def _media_dir(self) -> str:
+        """Media folder of the open or shown skin, where texture dialogs start; else the skin."""
+        skin = self._skin or self._result_skin
+        media = os.path.join(skin, "media") if skin else ""
+        return media if os.path.isdir(media) else skin
+
+    def _texture_tool(self, unpack: bool):
+        """Start an unpack or pack from the skin's media folder, unless a validation runs."""
+        if self._worker:
+            self.statusBar().showMessage("Wait for the validation to finish, or cancel it", 5000)
+        elif unpack:
+            self.textures.unpack(self._media_dir())
+        else:
+            self.textures.pack(self._media_dir())
 
     def _pick_from_menu(self, item: QListWidgetItem):
         """Close the skin menu and validate the skin picked in its list."""
@@ -821,7 +860,7 @@ class KdkApp(QMainWindow):
 
     def _run_validation(self):
         """Validate open skin in background; card hides window for new skin or start-screen run."""
-        if not self._skin or (self._worker_thread and self._worker_thread.isRunning()):
+        if not self._skin or (self._worker_thread and self._worker_thread.isRunning()) or self.textures.busy():
             return
         self._from_start = self.pages.currentWidget() is self.start
         self._settle_release()
@@ -830,7 +869,7 @@ class KdkApp(QMainWindow):
             widget.setEnabled(False)
         self.notice_banner.setVisible(False)
         self.summary_label.setText("Validating...")
-        self.run_card.start(os.path.basename(self._skin), pickable=not self._from_start,
+        self.run_card.start(f"Validating {os.path.basename(self._skin)}", pickable=not self._from_start,
                             covers=self._from_start or self._skin != self._result_skin)
 
         thread = QThread(self)
@@ -857,8 +896,15 @@ class KdkApp(QMainWindow):
         if then:
             then()
 
+    def _cancel_job(self):
+        """Cancel the validation or texture job the progress card shows."""
+        if self._worker:
+            self._cancel_run()
+        else:
+            self.textures.cancel()
+
     def _cancel_run(self, then: Callable[[], None] | None = None):
-        """Stop the run at its next progress report, queueing what to do once it has stopped."""
+        """Cancel the run at its next progress report, queueing what to do once it has stopped."""
         if not self._worker:
             if then:
                 then()

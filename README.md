@@ -32,9 +32,10 @@ Download them from the [Releases page](https://github.com/MikeSiLVO/kdk/releases
 ```bash
 pip install kdk            # CLI
 pip install "kdk[gui]"     # CLI and GUI
+pip install "kdk[textures]"  # CLI with Textures.xbt packing and unpacking
 ```
 
-Requires Python 3.10+. The CLI needs only `lxml` and `rich`; the GUI adds PySide6.
+Requires Python 3.10+. The CLI needs only `lxml` and `rich`; the GUI adds PySide6. Packing and unpacking textures adds Pillow and lzallright, which the GUI install includes.
 
 On Linux the GUI needs a few system libraries that most desktop installs
 already have. On Debian and Ubuntu they are `libegl1`, `libxkbcommon0`,
@@ -140,6 +141,21 @@ with the comment's reason, and never counts as new.
 Exit code is `1` when head adds a finding, `2` when kdk could not finish, and `0` otherwise;
 `--exit-zero` gives `0` for any finished run. Runs from different kdk versions or Kodi releases
 are not compared.
+
+## Packing and unpacking textures
+
+`kdk textures unpack <bundle>` writes every image in a Textures.xbt back out as a file, and `kdk textures pack <folder>` packs a folder of PNG, JPG and GIF images into one. The GUI offers both on its start screen, and under Tools, the wrench button beside Settings.
+
+```bash
+kdk textures unpack media/Textures.xbt -o media   # unpack beside the skin's other media
+kdk textures pack media                            # write media/Textures.xbt
+```
+
+- Unpacking writes each image in the format its name gives: PNG, a JPEG for a `.jpg`, and an animated GIF with every frame for a `.gif`. A bundle holds the pixels, not the original file, so a JPG comes back saved again as a high-quality JPEG.
+- A bundle keeps every name in lowercase. Unpacking a skin's own `media/*.xbt` gives each name the case the skin's XML writes it in; a name the XML never mentions stays lowercase.
+- Unpacking never replaces a file already in the folder unless `--overwrite` is given. The default folder is the bundle's name in the current directory.
+- Packing writes a bundle Omega and Piers both load. It leaves out hidden folders, and the default output is `Textures.xbt` inside the folder.
+- A file that is not a readable image, or whose lowercase name another file already takes, is left out and listed. Either command then exits `1`; `2` means it could not run.
 
 ## GitHub Actions
 

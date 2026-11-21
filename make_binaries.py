@@ -1,19 +1,6 @@
-"""Local PyInstaller wrapper. Run `python make_binaries.py` from the repo root.
+"""Build the kdk console CLI and windowed GUI into dist/ as single-file PyInstaller binaries."""
 
-Named to avoid shadowing the `build` PyPA package: `build.py` at CWD wins
-sys.path resolution against the installed `build` package, breaking
-`python -m build` for wheel/sdist creation.
-
-Builds two single-file executables into `dist/`:
-  - `kdk`     - console build (CLI).
-  - `kdk-gui` - windowed build (no console flash on double-click).
-
-Both bundle the same code; the GUI binary uses `--noconsole` so launching the
-GUI doesn't pop a terminal. Mirrors `.github/workflows/release.yml`.
-
-Requires `pip install -e ".[build]"` first.
-"""
-
+# not build.py: at the repo root it shadows the PyPA `build` package and breaks `python -m build`
 from __future__ import annotations
 
 import os
@@ -34,19 +21,17 @@ BASE_ARGS = [
     "--collect-data", "kdk",
     "--hidden-import", "lxml.etree",
     "--hidden-import", "lxml._elementpath",
+    # Pillow imports numpy whenever the build host has it; kdk never uses it
+    "--exclude-module", "numpy",
     *(["--icon", str(ICON_PATH)] if ICON_PATH.is_file() else []),
 ]
 
-# CLI binary excludes the gui package + Qt entirely so it stays small.
 CLI_EXTRA = [
     "--exclude-module", "kdk.gui",
     "--exclude-module", "PySide6",
     "--exclude-module", "shiboken6",
 ]
 
-# GUI binary needs PySide6 - but only Core/Gui/Widgets. PyInstaller's PySide6
-# hook follows our imports automatically; we just exclude the heavy unused Qt
-# modules so the hook can't pull them in transitively.
 GUI_EXTRA = [
     "--exclude-module", "PySide6.QtNetwork",
     "--exclude-module", "PySide6.QtSql",
@@ -92,30 +77,20 @@ GUI_EXTRA = [
 
 
 def _retry(fn, attempts: int = 5):
-    """Run `fn`; on PermissionError/OSError retry with exponential backoff.
-
-    Windows AV / search-indexer / Explorer hold transient locks on freshly-created
-    .exe files; usually clears within a few seconds.
-    """
+    """Retry the call with backoff on an OSError, such as a lock Windows holds on a new file."""
     last = None
     for attempt in range(attempts):
         try:
             return fn()
         except (PermissionError, OSError) as e:
             last = e
-            time.sleep(0.25 * (2 ** attempt))  # 0.25, 0.5, 1, 2, 4s
+            time.sleep(0.25 * (2 ** attempt))
     if last:
         raise last
 
 
 def _wipe(*paths: Path) -> None:
-    """Empty/remove each path; tolerant of Windows file locks.
-
-    For files and `.spec` paths: delete with retry, fall back to rename-out-of-way.
-    For directories (`build/`, `dist/`): empty the *contents* rather than removing
-    the directory itself. The directory entry is sometimes locked even when the
-    files inside aren't - emptying still gives PyInstaller a clean slate to work in.
-    """
+    """Wipe files and folder contents, renaming locked ones aside; stuck file raises, rest warn."""
     for p in paths:
         if not p.exists():
             continue
@@ -132,7 +107,7 @@ def _wipe(*paths: Path) -> None:
                     raise
             continue
 
-        # Directory: empty its contents in place.
+        # the folder itself can stay locked when the files in it are not
         problems: list[Path] = []
         for child in p.iterdir():
             try:
@@ -141,8 +116,6 @@ def _wipe(*paths: Path) -> None:
                 else:
                     _retry(child.unlink)
             except (PermissionError, OSError):
-                # Try rename-out-of-way for this individual entry so PyInstaller
-                # can still write its replacement.
                 stale = child.with_name(f"{child.name}.stale.{os.getpid()}")
                 try:
                     child.rename(stale)
@@ -160,6 +133,7 @@ def _wipe(*paths: Path) -> None:
 
 
 def _run_pyinstaller(name: str, entry: Path, *, windowed: bool, extra: list[str]) -> int:
+    """Run PyInstaller for one binary, with or without a console; its exit code."""
     args = ["--name", name, *BASE_ARGS, *extra]
     if windowed:
         args.append("--noconsole")
@@ -170,11 +144,12 @@ def _run_pyinstaller(name: str, entry: Path, *, windowed: bool, extra: list[str]
 
 
 def _ensure_build_deps() -> int:
-    """Install missing build-time deps. The end-user binary is self-contained;
-    only the build host needs these installed."""
+    """Ensure the build deps and PyInstaller are present, else pip-install them; exit code."""
     try:
-        import PySide6  # noqa: F401
+        import lzallright  # noqa: F401
         import lxml  # noqa: F401
+        import PIL  # noqa: F401
+        import PySide6  # noqa: F401
         if shutil.which("pyinstaller"):
             return 0
     except ImportError:
@@ -195,6 +170,7 @@ def _ensure_build_deps() -> int:
 
 
 def main() -> int:
+    """Install any missing build deps, wipe build/ and dist/, build both binaries; exit code."""
     rc = _ensure_build_deps()
     if rc != 0:
         return rc
@@ -203,9 +179,6 @@ def main() -> int:
         print('pyinstaller still not found after install. Aborting.', file=sys.stderr)
         return 1
 
-    # Each PyInstaller invocation creates its own subdir under `build/` and a
-    # `<name>.spec` next to this script. Wipe everything so repeated builds
-    # don't pick up stale data.
     _wipe(
         REPO_ROOT / "build",
         REPO_ROOT / "dist",
