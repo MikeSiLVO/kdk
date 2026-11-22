@@ -6,7 +6,7 @@ import os
 from collections import Counter
 
 from kdk import __version__
-from kdk.libs.validation.constants import SEVERITY_ERROR, SEVERITY_WARNING
+from kdk.libs.validation.constants import SEVERITY_ERROR, SEVERITY_HINT, SEVERITY_WARNING
 
 # raised only when a field changes meaning or goes away; new fields keep it
 FORMAT_VERSION = 1
@@ -74,6 +74,7 @@ def render_error(message):
 def render_json(result, issues):
     """Machine-readable payload of the run's issues, muted ones too, with versions and notices."""
     total_errors, total_warnings, total_muted = counts(issues)
+    hints = sum(i.get("severity") == SEVERITY_HINT and not i.get("muted") for rows in issues.values() for i in rows)
     return {
         "format_version": FORMAT_VERSION,
         "kdk_version": __version__,
@@ -85,6 +86,7 @@ def render_json(result, issues):
         "duration_seconds": round(result["duration"], 2),
         "errors": total_errors,
         "warnings": total_warnings,
+        "hints": hints,
         "muted": total_muted,
         "categories": {c: _rows(rows, result["skin_path"]) for c, rows in issues.items() if rows},
     }

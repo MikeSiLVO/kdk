@@ -77,6 +77,15 @@ def test_paths_are_skin_relative_and_rows_sorted():
     assert rows[0]["file"].startswith(root)
 
 
+def test_hints_are_totaled_apart_from_warnings():
+    """Unmuted hint rows get their own total; a muted hint counts only as muted."""
+    rows = [{"message": "a", "severity": "hint"}, {"message": "b", "severity": "hint", "muted": "x.xml:1"},
+            {"message": "c", "severity": "warning"}]
+    result = {"skin_name": "skin.test", "skin_path": os.sep, "timestamp": "", "duration": 0}
+    payload = render_json(result, {"XML Validation": rows})
+    assert (payload["warnings"], payload["hints"], payload["muted"]) == (1, 1, 1)
+
+
 def test_rows_lead_with_file_line_rule_and_subject():
     """Each row opens with file, line, rule and subject; a line's rows run by rule."""
     root = os.path.join(os.sep, "skins", "skin.test")
